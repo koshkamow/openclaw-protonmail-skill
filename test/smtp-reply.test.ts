@@ -127,6 +127,33 @@ describe('SMTPClient.reply()', () => {
     expect(mockSendMail.mock.calls[0][0].references).toBe('<original-msg-id@example.com>');
   });
 
+  it('passes attachments through to nodemailer', async () => {
+    const smtp = makeSmtp();
+    const attachments = [{ filename: 'report.pdf', path: '/tmp/report.pdf' }];
+
+    await smtp.reply(parsedMail(), 'Attached.', { attachments });
+
+    expect(mockSendMail.mock.calls[0][0].attachments).toEqual(attachments);
+  });
+
+  it('leaves attachments undefined when no options are given', async () => {
+    const smtp = makeSmtp();
+    await smtp.reply(parsedMail(), 'Hi');
+    expect(mockSendMail.mock.calls[0][0].attachments).toBeUndefined();
+  });
+
+  it('keeps threading headers intact when replying with an attachment', async () => {
+    const smtp = makeSmtp();
+    await smtp.reply(parsedMail(), 'Attached.', {
+      attachments: [{ filename: 'report.pdf', path: '/tmp/report.pdf' }],
+    });
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
+    expect(sent.references).toBe('<original-msg-id@example.com>');
+    expect(sent.subject).toBe('Re: Original subject');
+  });
+
   it('throws when no From or Reply-To address is available', async () => {
     const smtp = makeSmtp();
     const broken = parsedMail({ from: { value: [] }, replyTo: undefined });

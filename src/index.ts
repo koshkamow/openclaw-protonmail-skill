@@ -24,7 +24,16 @@
 
 import { IMAPClient } from './imap';
 import { SMTPClient } from './smtp';
+import type { ReplyOptions } from './smtp';
 import { registerTools } from './tools';
+
+export type { ReplyOptions, SendOptions } from './smtp';
+export {
+  resolveAttachments,
+  pickAttachment,
+  AttachmentError,
+} from './attachments';
+export type { ResolvedAttachment } from './attachments';
 
 /**
  * Configuration options for ProtonMail skill
@@ -228,15 +237,16 @@ export class ProtonMailSkill {
    * 
    * @param messageId - Original message ID to reply to
    * @param body - Reply text
+   * @param options - Optional settings (attachments)
    * @returns Send result
    * 
    * @remarks
    * Automatically sets Reply-To, In-Reply-To, and References headers
    * to maintain threading.
    */
-  async replyToEmail(messageId: string, body: string): Promise<any> {
+  async replyToEmail(messageId: string, body: string, options?: ReplyOptions): Promise<any> {
     const original = await this.imap.readMessage(messageId);
-    return this.smtp.reply(original, body);
+    return this.smtp.reply(original, body, options);
   }
 }
 

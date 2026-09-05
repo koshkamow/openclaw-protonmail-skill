@@ -60,12 +60,23 @@ protonmail search "from:alice@example.com" --limit=20
 # Read specific email
 protonmail read <uid>
 
+# Write one attachment's bytes to stdout — redirect them to a file
+protonmail read <uid> --attachment=report.pdf > report.pdf
+
 # Send email
 protonmail send --to=bob@example.com --subject="Meeting" --body="See you at 3pm"
 
-# Reply to email
-protonmail reply <uid> --body="Sounds good!"
+# Send email with attachment(s) — repeat --attach for multiple files
+protonmail send --to=bob@example.com --subject="Report" --body="Attached." --attach=/path/report.pdf --attach=/path/data.csv
+
+# Reply to email (optionally with attachments)
+protonmail reply <uid> --body="Sounds good!" [--attach=/path/file.pdf]
 ```
+
+Every `--attach` path is checked before anything is sent, so a mistyped path
+fails on its own message rather than producing a half-formed email.
+`--attachment` matches the filename exactly first, then case-insensitively,
+and lists what the message does carry when nothing matches.
 
 ## Common Requests
 

@@ -63,6 +63,19 @@ export interface SendOptions {
 }
 
 /**
+ * Options for replying to an existing message
+ *
+ * @remarks
+ * Narrower than {@link SendOptions} on purpose. Recipients and subject are
+ * derived from the message being answered, so accepting `cc`/`bcc`/`html`
+ * here would advertise settings that reply() does not read.
+ */
+export interface ReplyOptions {
+  /** File attachments */
+  attachments?: SendOptions['attachments'];
+}
+
+/**
  * SMTP client for sending emails via Proton Mail Bridge
  * 
  * @remarks
@@ -138,6 +151,7 @@ export class SMTPClient {
    * 
    * @param originalMessage - Original email (from IMAP readMessage)
    * @param body - Reply text
+   * @param options - Additional options (attachments)
    * @returns Send result
    * 
    * @throws {Error} If reply fails
@@ -156,7 +170,7 @@ export class SMTPClient {
    * await smtp.reply(original, 'Thanks, I'll review this today.');
    * ```
    */
-  async reply(originalMessage: any, body: string): Promise<any> {
+  async reply(originalMessage: any, body: string, options?: ReplyOptions): Promise<any> {
     // mailparser's ParsedMail shapes From and Reply-To as AddressObject,
     // not as arrays. The address lives at .value[0].address — not [0].address.
     //
@@ -193,6 +207,7 @@ export class SMTPClient {
       text: body,
       inReplyTo: originalMessage.messageId,
       references,
+      attachments: options?.attachments,
     };
 
     return this.transporter.sendMail(mailOptions);

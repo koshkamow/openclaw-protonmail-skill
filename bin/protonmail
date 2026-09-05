@@ -1,16 +1,16 @@
 #!/usr/bin/env node
 /**
  * ProtonMail CLI for OpenClaw
- * 
+ *
  * Usage:
  *   protonmail list-inbox [--limit=10] [--unread]
  *   protonmail search <query> [--limit=10]
- *   protonmail read <message-id>
- *   protonmail send --to=<email> --subject=<subject> --body=<body> [--cc=<email>] [--bcc=<email>]
- *   protonmail reply <message-id> --body=<body>
+ *   protonmail read <message-id> [--attachment=<filename>]
+ *   protonmail send --to=<email> --subject=<subject> --body=<body> [--cc=<email>] [--bcc=<email>] [--attach=<path> ...]
+ *   protonmail reply <message-id> --body=<body> [--attach=<path> ...]
  */
 
-const { ProtonMailSkill } = require('../dist/index.js');
+const { ProtonMailSkill, resolveAttachments, pickAttachment } = require('../dist/index.js');
 
 async function main() {
   const args = process.argv.slice(2);
@@ -19,6 +19,16 @@ async function main() {
   if (!command) {
     console.error('Usage: protonmail <command> [options]');
     console.error('Commands: list-inbox, search, read, send, reply');
+    process.exit(1);
+  }
+
+  // Resolved before any connection is opened, so a mistyped path fails on its
+  // own message rather than after a session has been established.
+  let attachments;
+  try {
+    attachments = resolveAttachments(getArgs(args, 'attach'));
+  } catch (err) {
+    console.error(`Error: ${err.message}`);
     process.exit(1);
   }
 
@@ -54,6 +64,15 @@ async function main() {
           process.exit(1);
         }
         const email = await skill.readEmail(messageId);
+
+        const wanted = getArg(args, 'attachment');
+        if (wanted) {
+          // Raw bytes on stdout, so the caller redirects them to a file.
+          const hit = pickAttachment(email.attachments || [], wanted);
+          process.stdout.write(hit.content);
+          break;
+        }
+
         console.log(JSON.stringify({
           from: email.from?.text,
           to: email.to?.text,
@@ -82,7 +101,7 @@ async function main() {
           process.exit(1);
         }
 
-        const result = await skill.sendEmail(to, subject, body, { cc, bcc });
+        const result = await skill.sendEmail(to, subject, body, { cc, bcc, attachments });
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -96,7 +115,7 @@ async function main() {
           process.exit(1);
         }
 
-        const result = await skill.replyToEmail(messageId, body);
+        const result = await skill.replyToEmail(messageId, body, { attachments });
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -119,6 +138,14 @@ function getArg(args, name) {
   const prefix = `--${name}=`;
   const arg = args.find(a => a.startsWith(prefix));
   return arg ? arg.substring(prefix.length) : null;
+}
+
+function getArgs(args, name) {
+  const prefix = `--${name}=`;
+  return args
+    .filter(a => a.startsWith(prefix))
+    .map(a => a.substring(prefix.length))
+    .filter(Boolean);
 }
 
 main();
