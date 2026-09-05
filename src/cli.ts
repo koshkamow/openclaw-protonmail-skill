@@ -101,6 +101,22 @@ export function getArgs(args: string[], name: string): string[] {
 }
 
 /**
+ * The value of an optional `--name=value` flag, absent when it is empty.
+ *
+ * @returns The value, or undefined when the flag is missing **or blank**
+ *
+ * @remarks
+ * `--to=` with nothing after it means the flag was not really given, and the
+ * commands that read these flags document a fallback for an absent one —
+ * `thread` sends to the original sender. Forwarding `''` instead would skip
+ * that fallback and fail at nodemailer, so an empty value is treated as
+ * absence here rather than at each call site.
+ */
+export function optionalArg(args: string[], name: string): string | undefined {
+  return getArg(args, name) || undefined;
+}
+
+/**
  * The UID a message command acts on.
  *
  * @throws {UsageError} If the first positional argument is missing or is not
@@ -245,8 +261,8 @@ async function dispatch(
 
       emit(
         await skill.sendEmail(to, subject, body, {
-          cc: getArg(args, 'cc') ?? undefined,
-          bcc: getArg(args, 'bcc') ?? undefined,
+          cc: optionalArg(args, 'cc'),
+          bcc: optionalArg(args, 'bcc'),
           attachments,
         }),
       );
@@ -312,9 +328,9 @@ async function dispatch(
           uid,
           body,
           {
-            to: getArg(args, 'to') ?? undefined,
-            cc: getArg(args, 'cc') ?? undefined,
-            bcc: getArg(args, 'bcc') ?? undefined,
+            to: optionalArg(args, 'to'),
+            cc: optionalArg(args, 'cc'),
+            bcc: optionalArg(args, 'bcc'),
             attachments,
           },
           mailboxArg(args),

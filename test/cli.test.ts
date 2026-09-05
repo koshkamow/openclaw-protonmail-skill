@@ -20,6 +20,7 @@ import {
   mailboxArg,
   mailboxKind,
   messageOf,
+  optionalArg,
   requireUid,
   UsageError,
 } from '../src/cli';
@@ -51,6 +52,24 @@ describe('getArg()', () => {
 
   it('does not match a flag whose name is a prefix of another', () => {
     expect(getArg(['read', '--attachment=report.pdf'], 'attach')).toBeNull();
+  });
+});
+
+describe('optionalArg()', () => {
+  it('reads the value when the flag is given', () => {
+    expect(optionalArg(['thread', '--to=bob@example.com'], 'to')).toBe('bob@example.com');
+  });
+
+  it('is undefined when the flag is absent, so the command falls back', () => {
+    expect(optionalArg(['thread'], 'to')).toBeUndefined();
+  });
+
+  it('is undefined for an empty --to=, which is the regression this guards', () => {
+    // `?? undefined` would forward '' here and skip continueThread's fallback
+    // to the original sender, failing at nodemailer instead.
+    expect(optionalArg(['thread', '--to='], 'to')).toBeUndefined();
+    expect(optionalArg(['thread', '--cc='], 'cc')).toBeUndefined();
+    expect(optionalArg(['thread', '--bcc='], 'bcc')).toBeUndefined();
   });
 });
 
