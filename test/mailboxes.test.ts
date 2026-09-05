@@ -7,9 +7,11 @@
 
 import { describe, it, expect } from 'bun:test';
 
+import type { MailboxInfo } from '../src/mailboxes';
 import {
   classifyMailbox,
   resolveMailboxPath,
+  resolveTargetMailbox,
   assertDeletable,
   MailboxError,
   FOLDERS_ROOT,
@@ -114,6 +116,58 @@ describe('resolveMailboxPath()', () => {
     expect(() => resolveMailboxPath('/Receipts', 'folder')).toThrow('empty path segment');
     expect(() => resolveMailboxPath('Receipts/', 'folder')).toThrow('empty path segment');
     expect(() => resolveMailboxPath('a//b', 'folder')).toThrow('empty path segment');
+  });
+});
+
+describe('resolveTargetMailbox()', () => {
+  const boxes: MailboxInfo[] = [
+    { path: 'INBOX', name: 'INBOX', kind: 'system', specialUse: '\\Inbox', selectable: true },
+    { path: 'Archive', name: 'Archive', kind: 'system', specialUse: '\\Archive', selectable: true },
+    { path: 'Trash', name: 'Trash', kind: 'system', specialUse: '\\Trash', selectable: true },
+    { path: 'Folders', name: 'Folders', kind: 'container', specialUse: null, selectable: false },
+    { path: 'Labels', name: 'Labels', kind: 'container', specialUse: null, selectable: false },
+    { path: 'Folders/Receipts', name: 'Receipts', kind: 'folder', specialUse: null, selectable: true },
+    { path: 'Labels/Urgent', name: 'Urgent', kind: 'label', specialUse: null, selectable: true },
+    { path: 'Folders/Both', name: 'Both', kind: 'folder', specialUse: null, selectable: true },
+    { path: 'Labels/Both', name: 'Both', kind: 'label', specialUse: null, selectable: true },
+  ];
+
+  it('accepts a system mailbox by name', () => {
+    expect(resolveTargetMailbox('Archive', boxes)).toBe('Archive');
+    expect(resolveTargetMailbox('Trash', boxes)).toBe('Trash');
+  });
+
+  it('accepts a full path', () => {
+    expect(resolveTargetMailbox('Folders/Receipts', boxes)).toBe('Folders/Receipts');
+    expect(resolveTargetMailbox('Labels/Urgent', boxes)).toBe('Labels/Urgent');
+  });
+
+  it('finds a bare name in whichever tree holds it', () => {
+    expect(resolveTargetMailbox('Receipts', boxes)).toBe('Folders/Receipts');
+    expect(resolveTargetMailbox('Urgent', boxes)).toBe('Labels/Urgent');
+  });
+
+  it('matches case-insensitively', () => {
+    expect(resolveTargetMailbox('archive', boxes)).toBe('Archive');
+    expect(resolveTargetMailbox('folders/receipts', boxes)).toBe('Folders/Receipts');
+  });
+
+  it('refuses to choose when a bare name exists in both trees', () => {
+    expect(() => resolveTargetMailbox('Both', boxes)).toThrow('both a folder and a label');
+    expect(() => resolveTargetMailbox('Both', boxes)).toThrow('Folders/Both or Labels/Both');
+  });
+
+  it('rejects a tree root, which cannot hold messages', () => {
+    expect(() => resolveTargetMailbox('Folders', boxes)).toThrow('cannot hold messages');
+  });
+
+  it('lists what is available when nothing matches', () => {
+    expect(() => resolveTargetMailbox('Nowhere', boxes)).toThrow('mailbox not found: Nowhere');
+    expect(() => resolveTargetMailbox('Nowhere', boxes)).toThrow('Available: INBOX, Archive');
+  });
+
+  it('requires a target', () => {
+    expect(() => resolveTargetMailbox('', boxes)).toThrow('target mailbox is required');
   });
 });
 

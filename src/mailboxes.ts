@@ -55,6 +55,21 @@ export const FOLDERS_ROOT = 'Folders';
 export const LABELS_ROOT = 'Labels';
 
 /**
+ * The mailbox whose membership *is* Proton's star.
+ *
+ * @remarks
+ * Measured against Bridge 03.25.00. A starred message reads as `\Flagged` in
+ * its home mailbox, but that flag is a projection, not the state: setting
+ * `\Flagged` directly does not star anything, and Bridge reverts the flag
+ * within about fifteen seconds. Copying the message into `Starred` is what
+ * stars it, and removing it from `Starred` is what unstars it.
+ */
+export const STARRED_MAILBOX = 'Starred';
+
+/** The mailbox `delete` moves a message to, rather than expunging it */
+export const TRASH_MAILBOX = 'Trash';
+
+/**
  * Mailboxes Proton provides and that must not be deleted.
  *
  * @remarks
@@ -179,6 +194,73 @@ export function resolveMailboxPath(name: string, kind: 'folder' | 'label'): stri
   }
 
   return `${wanted}/${trimmed}`;
+}
+
+/**
+ * Resolve a move target against the mailboxes that actually exist.
+ *
+ * @param name - What the user typed: a full path, or a bare name
+ * @param existing - The mailbox list from the server
+ * @returns The full path to move into
+ *
+ * @throws {MailboxError} If nothing matches, several do, or the match cannot
+ *   hold messages
+ *
+ * @remarks
+ * A move target differs from a create target: it may be a system mailbox
+ * (`Archive`, `Trash`) as well as a user folder or label, so it is resolved by
+ * looking at what is there rather than by prefixing. A bare name that exists
+ * in both trees is ambiguous and says so, rather than picking one.
+ *
+ * @example
+ * ```typescript
+ * resolveTargetMailbox('Archive', boxes);   // 'Archive'
+ * resolveTargetMailbox('Receipts', boxes);  // 'Folders/Receipts'
+ * ```
+ */
+export function resolveTargetMailbox(name: string, existing: MailboxInfo[]): string {
+  const trimmed = (name || '').trim();
+
+  if (!trimmed) {
+    throw new MailboxError('target mailbox is required');
+  }
+
+  const selectable = existing.filter((box) => box.selectable);
+
+  const exact =
+    selectable.find((box) => box.path === trimmed) ||
+    selectable.find((box) => box.path.toLowerCase() === trimmed.toLowerCase());
+  if (exact) return exact.path;
+
+  // A bare name: look for it in either tree, and refuse to choose between them.
+  const candidates = selectable.filter(
+    (box) =>
+      box.path.toLowerCase() === `${FOLDERS_ROOT}/${trimmed}`.toLowerCase() ||
+      box.path.toLowerCase() === `${LABELS_ROOT}/${trimmed}`.toLowerCase()
+  );
+
+  if (candidates.length === 1) return candidates[0].path;
+
+  if (candidates.length > 1) {
+    throw new MailboxError(
+      `'${trimmed}' is both a folder and a label; give the full path ` +
+        `(${candidates.map((c) => c.path).join(' or ')})`
+    );
+  }
+
+  // Named something that exists but cannot hold messages — a tree root.
+  const unselectable = existing.find(
+    (box) => !box.selectable && box.path.toLowerCase() === trimmed.toLowerCase()
+  );
+  if (unselectable) {
+    throw new MailboxError(
+      `'${unselectable.path}' cannot hold messages; it is the tree holding others`
+    );
+  }
+
+  throw new MailboxError(
+    `mailbox not found: ${trimmed}\nAvailable: ${selectable.map((b) => b.path).join(', ')}`
+  );
 }
 
 /**

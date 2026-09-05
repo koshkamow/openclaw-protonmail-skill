@@ -26,19 +26,22 @@ import { IMAPClient } from './imap';
 import { SMTPClient } from './smtp';
 import type { ReplyOptions } from './smtp';
 import { bridgeTlsOptions } from './bridge-tls';
-import { resolveMailboxPath } from './mailboxes';
+import { resolveMailboxPath, resolveTargetMailbox } from './mailboxes';
 import type { MailboxInfo } from './mailboxes';
 import { registerTools } from './tools';
 
 export { bridgeTlsOptions } from './bridge-tls';
 export {
   resolveMailboxPath,
+  resolveTargetMailbox,
   classifyMailbox,
   assertDeletable,
   isSystemMailbox,
   MailboxError,
   FOLDERS_ROOT,
   LABELS_ROOT,
+  STARRED_MAILBOX,
+  TRASH_MAILBOX,
 } from './mailboxes';
 export type { MailboxInfo, MailboxKind } from './mailboxes';
 
@@ -317,6 +320,82 @@ export class ProtonMailSkill {
     kind: 'folder' | 'label' = 'folder'
   ): Promise<{ path: string }> {
     return this.imap.deleteMailbox(resolveMailboxPath(name, kind));
+  }
+
+  // ========================================
+  // Message state
+  // ========================================
+
+  /**
+   * Mark a message read or unread
+   *
+   * @param uid - Message UID
+   * @param read - True for read, false for unread
+   * @param mailbox - Mailbox the message lives in (default: INBOX)
+   */
+  async markRead(uid: string, read: boolean, mailbox = 'INBOX'): Promise<{ uid: string; read: boolean }> {
+    return this.imap.markRead(uid, read, mailbox);
+  }
+
+  /**
+   * Star a message
+   *
+   * @param uid - Message UID
+   * @param mailbox - Mailbox the message lives in (default: INBOX)
+   *
+   * @remarks
+   * Proton's star is membership of the `Starred` mailbox. Setting `\Flagged`
+   * directly does not star anything; Bridge reverts it.
+   */
+  async starEmail(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
+    return this.imap.star(uid, mailbox);
+  }
+
+  /**
+   * Remove a message's star
+   *
+   * @param uid - Message UID
+   * @param mailbox - Mailbox the message lives in (default: INBOX)
+   */
+  async unstarEmail(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
+    return this.imap.unstar(uid, mailbox);
+  }
+
+  /**
+   * Move a message to another mailbox
+   *
+   * @param uid - Message UID
+   * @param target - Destination: a full path, or a bare folder or label name
+   * @param mailbox - Mailbox the message lives in (default: INBOX)
+   *
+   * @remarks
+   * The target is resolved against the mailboxes that exist, so a system
+   * mailbox (`Archive`) and a user folder (`Receipts`) are both accepted, and
+   * a name that exists in both trees is reported as ambiguous rather than
+   * guessed at.
+   */
+  async moveEmail(
+    uid: string,
+    target: string,
+    mailbox = 'INBOX'
+  ): Promise<{ uid: string; from: string; to: string; newUid: string | null }> {
+    const resolved = resolveTargetMailbox(target, await this.imap.listMailboxes());
+    return this.imap.moveMessage(uid, resolved, mailbox);
+  }
+
+  /**
+   * Delete a message, to Trash by default
+   *
+   * @param uid - Message UID
+   * @param permanent - Expunge rather than move to Trash
+   * @param mailbox - Mailbox the message lives in (default: INBOX)
+   */
+  async deleteEmail(
+    uid: string,
+    permanent = false,
+    mailbox = 'INBOX'
+  ): Promise<{ uid: string; deleted: 'trashed' | 'expunged'; to: string | null }> {
+    return this.imap.deleteMessage(uid, permanent, mailbox);
   }
 }
 

@@ -12,7 +12,13 @@ import type { MailboxLockObject, SearchObject } from 'imapflow';
 import { simpleParser, ParsedMail } from 'mailparser';
 
 import { bridgeTlsOptions } from './bridge-tls';
-import { assertDeletable, classifyMailbox, MailboxError } from './mailboxes';
+import {
+  assertDeletable,
+  classifyMailbox,
+  MailboxError,
+  STARRED_MAILBOX,
+  TRASH_MAILBOX,
+} from './mailboxes';
 import type { MailboxInfo } from './mailboxes';
 
 /**
@@ -440,6 +446,203 @@ export class IMAPClient {
 
     await client.mailboxDelete(path);
     return { path };
+  }
+
+  // ========================================
+  // Message state
+  // ========================================
+
+  /**
+   * Mark a message read or unread
+   *
+   * @param uid - Message UID
+   * @param read - True to set `\Seen`, false to clear it
+   * @param mailbox - Mailbox the message lives in
+   * @returns The UID and its resulting read state
+   *
+   * @throws {Error} If the UID is not in the mailbox
+   */
+  async markRead(uid: string, read: boolean, mailbox = 'INBOX'): Promise<{ uid: string; read: boolean }> {
+    return this.withMailbox(mailbox, false, async (client) => {
+      await this.assertMessageExists(client, uid, mailbox);
+
+      if (read) {
+        await client.messageFlagsAdd(uid, ['\\Seen'], { uid: true });
+      } else {
+        await client.messageFlagsRemove(uid, ['\\Seen'], { uid: true });
+      }
+
+      return { uid, read };
+    });
+  }
+
+  /**
+   * Star a message
+   *
+   * @param uid - Message UID
+   * @param mailbox - Mailbox the message lives in
+   * @returns The UID, and whether it was already starred
+   *
+   * @remarks
+   * A star is membership of the `Starred` mailbox, so this copies the message
+   * into it. Setting `\Flagged` directly does not star anything — Bridge
+   * reverts the flag within about fifteen seconds, because the label is the
+   * state and the flag only reflects it.
+   */
+  async star(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
+    const messageId = await this.messageIdOf(uid, mailbox);
+    const existing = await this.findByMessageId(STARRED_MAILBOX, messageId);
+
+    if (existing.length > 0) {
+      return { uid, starred: true, alreadyStarred: true };
+    }
+
+    await this.withMailbox(mailbox, false, async (client) => {
+      await client.messageCopy(uid, STARRED_MAILBOX, { uid: true });
+    });
+
+    return { uid, starred: true, alreadyStarred: false };
+  }
+
+  /**
+   * Remove a message's star
+   *
+   * @param uid - Message UID
+   * @param mailbox - Mailbox the message lives in
+   * @returns The UID, and whether it had been starred
+   *
+   * @remarks
+   * Removes the message's copy from the `Starred` mailbox, which is the label
+   * rather than the message: the message stays where it lives. The copy is
+   * found by Message-ID, since `Starred` has its own UID space.
+   */
+  async unstar(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
+    const messageId = await this.messageIdOf(uid, mailbox);
+    const starredUids = await this.findByMessageId(STARRED_MAILBOX, messageId);
+
+    if (starredUids.length === 0) {
+      return { uid, starred: false, wasStarred: false };
+    }
+
+    await this.withMailbox(STARRED_MAILBOX, false, async (client) => {
+      await client.messageDelete(starredUids, { uid: true });
+    });
+
+    return { uid, starred: false, wasStarred: true };
+  }
+
+  /**
+   * Move a message to another mailbox
+   *
+   * @param uid - Message UID
+   * @param target - Full path of the destination
+   * @param mailbox - Mailbox the message lives in
+   * @returns The UID, where it went, and its new UID there when the server says
+   *
+   * @remarks
+   * Bridge advertises MOVE, so this is one atomic operation rather than a
+   * copy followed by a delete that could half-fail.
+   */
+  async moveMessage(
+    uid: string,
+    target: string,
+    mailbox = 'INBOX'
+  ): Promise<{ uid: string; from: string; to: string; newUid: string | null }> {
+    return this.withMailbox(mailbox, false, async (client) => {
+      await this.assertMessageExists(client, uid, mailbox);
+
+      const result = await client.messageMove(uid, target, { uid: true });
+
+      // messageMove answers false when nothing matched. The existence check
+      // above has already ruled that out, so this narrows the type rather
+      // than reporting a case that can happen.
+      const mapped = result === false ? undefined : result.uidMap?.get(Number(uid));
+
+      return {
+        uid,
+        from: mailbox,
+        to: target,
+        newUid: mapped === undefined ? null : String(mapped),
+      };
+    });
+  }
+
+  /**
+   * Delete a message
+   *
+   * @param uid - Message UID
+   * @param permanent - Expunge instead of moving to Trash
+   * @param mailbox - Mailbox the message lives in
+   * @returns What was done and where the message went
+   *
+   * @remarks
+   * The default moves to Trash, which is recoverable. Expunging is not, so it
+   * happens only when asked for explicitly. Deleting from Trash itself is
+   * always an expunge — there is nowhere else for it to go.
+   */
+  async deleteMessage(
+    uid: string,
+    permanent = false,
+    mailbox = 'INBOX'
+  ): Promise<{ uid: string; deleted: 'trashed' | 'expunged'; to: string | null }> {
+    const expunge = permanent || mailbox === TRASH_MAILBOX;
+
+    if (expunge) {
+      return this.withMailbox(mailbox, false, async (client) => {
+        await this.assertMessageExists(client, uid, mailbox);
+        await client.messageDelete(uid, { uid: true });
+        return { uid, deleted: 'expunged' as const, to: null };
+      });
+    }
+
+    await this.moveMessage(uid, TRASH_MAILBOX, mailbox);
+    return { uid, deleted: 'trashed', to: TRASH_MAILBOX };
+  }
+
+  /**
+   * Throw unless the UID is present in the currently selected mailbox.
+   *
+   * @private
+   */
+  private async assertMessageExists(client: ImapFlow, uid: string, mailbox: string): Promise<void> {
+    const found = await client.fetchOne(uid, { uid: true }, { uid: true });
+    if (!found) {
+      throw new Error(`Message UID ${uid} not found in ${mailbox}`);
+    }
+  }
+
+  /**
+   * The Message-ID header of a UID, which identifies it across mailboxes.
+   *
+   * @private
+   */
+  private async messageIdOf(uid: string, mailbox: string): Promise<string> {
+    return this.withMailbox(mailbox, true, async (client) => {
+      const msg = await client.fetchOne(uid, { envelope: true }, { uid: true });
+
+      if (!msg) {
+        throw new Error(`Message UID ${uid} not found in ${mailbox}`);
+      }
+
+      const messageId = msg.envelope?.messageId;
+      if (!messageId) {
+        throw new Error(`Message UID ${uid} has no Message-ID, so it cannot be matched across mailboxes`);
+      }
+
+      return messageId;
+    });
+  }
+
+  /**
+   * UIDs in a mailbox carrying a given Message-ID.
+   *
+   * @private
+   */
+  private async findByMessageId(mailbox: string, messageId: string): Promise<number[]> {
+    return this.withMailbox(mailbox, true, async (client) => {
+      const hits = await client.search({ header: { 'message-id': messageId } }, { uid: true });
+      return hits || [];
+    });
   }
 
   /**

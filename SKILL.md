@@ -111,6 +111,39 @@ error rather than a silent guess. Proton's own mailboxes (`INBOX`, `Sent`,
 `Drafts`, `Archive`, `Spam`, `Trash`, `All Mail`, `Starred`) and the two tree
 roots cannot be created or deleted.
 
+### Message state
+
+```bash
+protonmail mark-read <uid>
+protonmail mark-unread <uid>
+protonmail star <uid>
+protonmail unstar <uid>
+
+# Move: a system mailbox, or a bare folder/label name, or a full path
+protonmail move <uid> Archive
+protonmail move <uid> Receipts
+protonmail move <uid> Labels/Urgent
+
+# Delete moves to Trash, which is recoverable
+protonmail delete <uid>
+
+# Irrecoverable, so it has to be asked for
+protonmail delete <uid> --permanent
+```
+
+All of these take `--mailbox=<path>` to act on a message outside INBOX. UIDs
+are per-mailbox, so a message that moves gets a new UID in its destination —
+`move` reports it as `newUid`.
+
+**How a Proton star works.** Measured against Bridge 03.25.00: the star is
+membership of the `Starred` mailbox, not a flag you can set. A starred message
+does read as `\Flagged` in its home mailbox, but that is a projection of the
+label rather than the state — setting `\Flagged` directly stars nothing, and
+Bridge reverts the flag within about fifteen seconds. So `star` copies the
+message into `Starred` and `unstar` removes it from there, matching it by
+Message-ID because `Starred` has its own UID space. Both are idempotent and
+report whether the message was already in that state.
+
 ## Common Requests
 
 - **List inbox:** "Check my ProtonMail inbox"

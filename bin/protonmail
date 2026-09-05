@@ -14,6 +14,12 @@
  *   protonmail list-folders [--kind=folder|label|system|all]
  *   protonmail create-folder <name> [--label]
  *   protonmail delete-folder <name> [--label]
+ *   protonmail mark-read <uid> [--mailbox=<path>]
+ *   protonmail mark-unread <uid> [--mailbox=<path>]
+ *   protonmail star <uid> [--mailbox=<path>]
+ *   protonmail unstar <uid> [--mailbox=<path>]
+ *   protonmail move <uid> <mailbox> [--mailbox=<source>]
+ *   protonmail delete <uid> [--permanent] [--mailbox=<path>]
  */
 
 const { ProtonMailSkill, resolveAttachments, pickAttachment } = require('../src/index.ts');
@@ -28,7 +34,22 @@ const COMMANDS = [
   '  list-folders [--kind=folder|label|system|all]',
   '  create-folder <name> [--label]',
   '  delete-folder <name> [--label]',
+  '  mark-read <uid> [--mailbox=<path>]',
+  '  mark-unread <uid> [--mailbox=<path>]',
+  '  star <uid> [--mailbox=<path>]',
+  '  unstar <uid> [--mailbox=<path>]',
+  '  move <uid> <mailbox> [--mailbox=<source>]',
+  '  delete <uid> [--permanent] [--mailbox=<path>]',
 ].join('\n');
+
+function requireUid(args, command) {
+  const uid = args[1];
+  if (!uid || !/^\d+$/.test(uid)) {
+    console.error(`Error: ${command} requires a numeric message UID`);
+    process.exit(1);
+  }
+  return uid;
+}
 
 // Proton keeps folders and labels in separate trees and they behave
 // differently, so the command says which it means rather than guessing.
@@ -179,6 +200,50 @@ async function main() {
         }
 
         const result = await skill.deleteMailbox(name, mailboxKind(args));
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'mark-read':
+      case 'mark-unread': {
+        const uid = requireUid(args, command);
+        const result = await skill.markRead(uid, command === 'mark-read', getArg(args, 'mailbox') || 'INBOX');
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'star': {
+        const uid = requireUid(args, command);
+        const result = await skill.starEmail(uid, getArg(args, 'mailbox') || 'INBOX');
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'unstar': {
+        const uid = requireUid(args, command);
+        const result = await skill.unstarEmail(uid, getArg(args, 'mailbox') || 'INBOX');
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'move': {
+        const uid = requireUid(args, command);
+        const target = args[2];
+        if (!target) {
+          console.error('Error: move requires <uid> and a destination mailbox');
+          process.exit(1);
+        }
+
+        const result = await skill.moveEmail(uid, target, getArg(args, 'mailbox') || 'INBOX');
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'delete': {
+        const uid = requireUid(args, command);
+        // Trash is recoverable; expunging is not, so it is opt-in.
+        const permanent = args.includes('--permanent');
+        const result = await skill.deleteEmail(uid, permanent, getArg(args, 'mailbox') || 'INBOX');
         console.log(JSON.stringify(result, null, 2));
         break;
       }
