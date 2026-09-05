@@ -3,8 +3,10 @@ name: CI
 on:
   push:
     branches: [ main, develop ]
+  # No branch filter: work ships as a stack, so most PRs target the layer
+  # below rather than main. Filtering to main/develop meant CI ran on the
+  # bottom PR of a chain and on none of the others.
   pull_request:
-    branches: [ main, develop ]
 
 jobs:
   check:
