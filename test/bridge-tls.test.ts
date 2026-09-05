@@ -13,22 +13,47 @@ import type { PeerCertificate } from 'node:tls';
 
 import { bridgeTlsOptions } from '../src/bridge-tls';
 
+/**
+ * A certificate double.
+ *
+ * @remarks
+ * Built as a real PeerCertificate rather than asserted through `unknown`, so
+ * the double keeps up with @types/node instead of silently drifting from it.
+ * `tls.checkServerIdentity` reads only `subject` and `subjectaltname`; the
+ * rest are the fields the type requires, filled with inert values.
+ */
+function cert(
+  fields: Pick<PeerCertificate, 'subject' | 'issuer' | 'subjectaltname'>,
+): PeerCertificate {
+  return {
+    ...fields,
+    ca: false,
+    raw: Buffer.alloc(0),
+    valid_from: 'Jan  1 00:00:00 2026 GMT',
+    valid_to: 'Jan  1 00:00:00 2027 GMT',
+    serialNumber: '00',
+    fingerprint: '00:00',
+    fingerprint256: '00:00',
+    fingerprint512: '00:00',
+  } satisfies PeerCertificate;
+}
+
 /** A certificate naming only the IP 127.0.0.1, as Bridge's does. */
 function bridgeCert(): PeerCertificate {
-  return {
+  return cert({
     subject: { CN: '127.0.0.1' },
     issuer: { CN: '127.0.0.1' },
     subjectaltname: 'IP Address:127.0.0.1',
-  } as unknown as PeerCertificate;
+  });
 }
 
 /** A certificate for some other host entirely. */
 function foreignCert(): PeerCertificate {
-  return {
+  return cert({
     subject: { CN: 'mail.example.com' },
     issuer: { CN: 'Example CA' },
     subjectaltname: 'DNS:mail.example.com',
-  } as unknown as PeerCertificate;
+  });
 }
 
 describe('bridgeTlsOptions()', () => {

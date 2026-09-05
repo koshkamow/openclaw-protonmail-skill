@@ -22,11 +22,14 @@
  * ```
  */
 
+import type { ParsedMail } from 'mailparser';
+
 import { bridgeTlsOptions } from './bridge-tls';
+import type { EmailMetadata } from './imap';
 import { IMAPClient } from './imap';
 import type { MailboxInfo } from './mailboxes';
 import { resolveMailboxPath, resolveTargetMailbox } from './mailboxes';
-import type { ReplyOptions, ThreadOptions } from './smtp';
+import type { ReplyOptions, SendOptions, SentMessageInfo, ThreadOptions } from './smtp';
 import { SMTPClient } from './smtp';
 import { registerTools } from './tools';
 
@@ -37,6 +40,7 @@ export {
   resolveAttachments,
 } from './attachments';
 export { bridgeTlsOptions } from './bridge-tls';
+export type { EmailMetadata, IMAPConfig } from './imap';
 export type { MailboxInfo, MailboxKind } from './mailboxes';
 export {
   assertDeletable,
@@ -51,7 +55,13 @@ export {
   STARRED_MAILBOX,
   TRASH_MAILBOX,
 } from './mailboxes';
-export type { ReplyOptions, SendOptions, ThreadOptions } from './smtp';
+export type {
+  ReplyOptions,
+  SendOptions,
+  SentMessageInfo,
+  SMTPConfig,
+  ThreadOptions,
+} from './smtp';
 export type { ThreadableMessage, ThreadingHeaders } from './threading';
 export {
   replySubject,
@@ -218,7 +228,7 @@ export class ProtonMailSkill {
    * const recent = await skill.listInbox(5, true); // 5 unread emails
    * ```
    */
-  async listInbox(limit = 10, unreadOnly = false, mailbox = 'INBOX'): Promise<any[]> {
+  async listInbox(limit = 10, unreadOnly = false, mailbox = 'INBOX'): Promise<EmailMetadata[]> {
     return this.imap.listInbox(limit, unreadOnly, await this.resolveMailbox(mailbox));
   }
 
@@ -234,7 +244,7 @@ export class ProtonMailSkill {
    * const results = await skill.searchEmails('from:alice@example.com', 20);
    * ```
    */
-  async searchEmails(query: string, limit = 10, mailbox = 'INBOX'): Promise<any[]> {
+  async searchEmails(query: string, limit = 10, mailbox = 'INBOX'): Promise<EmailMetadata[]> {
     return this.imap.search(query, limit, await this.resolveMailbox(mailbox));
   }
 
@@ -246,7 +256,7 @@ export class ProtonMailSkill {
    *
    * @throws {Error} If message ID is invalid or email doesn't exist
    */
-  async readEmail(messageId: string, mailbox = 'INBOX'): Promise<any> {
+  async readEmail(messageId: string, mailbox = 'INBOX'): Promise<ParsedMail> {
     return this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
   }
 
@@ -269,7 +279,12 @@ export class ProtonMailSkill {
    * );
    * ```
    */
-  async sendEmail(to: string, subject: string, body: string, options?: any): Promise<any> {
+  async sendEmail(
+    to: string,
+    subject: string,
+    body: string,
+    options?: SendOptions,
+  ): Promise<SentMessageInfo> {
     return this.smtp.send(to, subject, body, options);
   }
 
@@ -290,7 +305,7 @@ export class ProtonMailSkill {
     body: string,
     options?: ReplyOptions,
     mailbox = 'INBOX',
-  ): Promise<any> {
+  ): Promise<SentMessageInfo> {
     const original = await this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
     return this.smtp.reply(original, body, options);
   }
@@ -314,7 +329,7 @@ export class ProtonMailSkill {
     body: string,
     options?: ThreadOptions,
     mailbox = 'INBOX',
-  ): Promise<any> {
+  ): Promise<SentMessageInfo> {
     const original = await this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
     return this.smtp.continueThread(original, body, options);
   }

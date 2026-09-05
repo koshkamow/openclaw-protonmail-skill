@@ -8,10 +8,23 @@
  */
 
 import type { PeerCertificate } from 'node:tls';
+import type { ParsedMail } from 'mailparser';
 import type { SendMailOptions, Transporter } from 'nodemailer';
 import nodemailer from 'nodemailer';
+import type SMTPTransport from 'nodemailer/lib/smtp-transport';
 
 import { replySubject, threadingHeaders, threadSubject } from './threading';
+
+/**
+ * What nodemailer reports about a message it accepted.
+ *
+ * @remarks
+ * Taken from the SMTP transport rather than nodemailer's own top-level
+ * `SentMessageInfo`, which is declared as `any` — importing that name would
+ * have been an `any` wearing a type's clothes. This one is a real interface:
+ * `envelope`, `messageId`, `accepted`, `rejected`, `pending`, `response`.
+ */
+export type SentMessageInfo = SMTPTransport.SentMessageInfo;
 
 /**
  * SMTP connection configuration
@@ -119,9 +132,9 @@ export interface ThreadOptions {
  * arrays. The address lives at `.value[0].address` — not `[0].address`, which
  * is the bug this once had.
  */
-function originalSender(originalMessage: any, verb: string): string {
+function originalSender(originalMessage: ParsedMail, verb: string): string {
   const address =
-    originalMessage?.replyTo?.value?.[0]?.address || originalMessage?.from?.value?.[0]?.address;
+    originalMessage.replyTo?.value[0]?.address || originalMessage.from?.value[0]?.address;
 
   if (!address) {
     throw new Error(
@@ -140,7 +153,7 @@ function originalSender(originalMessage: any, verb: string): string {
  * and routing to Proton servers.
  */
 export class SMTPClient {
-  private transporter: Transporter;
+  private transporter: Transporter<SentMessageInfo>;
   private config: SMTPConfig;
 
   /**
@@ -178,7 +191,12 @@ export class SMTPClient {
    * console.log('Sent:', result.messageId);
    * ```
    */
-  async send(to: string, subject: string, body: string, options?: SendOptions): Promise<any> {
+  async send(
+    to: string,
+    subject: string,
+    body: string,
+    options?: SendOptions,
+  ): Promise<SentMessageInfo> {
     const mailOptions: SendMailOptions = {
       from: this.config.auth.user,
       to,
@@ -222,7 +240,11 @@ export class SMTPClient {
    * await smtp.reply(original, 'Thanks, I'll review this today.');
    * ```
    */
-  async reply(originalMessage: any, body: string, options?: ReplyOptions): Promise<any> {
+  async reply(
+    originalMessage: ParsedMail,
+    body: string,
+    options?: ReplyOptions,
+  ): Promise<SentMessageInfo> {
     const to = originalSender(originalMessage, 'reply');
     const { inReplyTo, references } = threadingHeaders(originalMessage);
 
@@ -263,7 +285,11 @@ export class SMTPClient {
    * await smtp.continueThread(original, 'Adding Bob.', { to: 'bob@example.com' });
    * ```
    */
-  async continueThread(originalMessage: any, body: string, options?: ThreadOptions): Promise<any> {
+  async continueThread(
+    originalMessage: ParsedMail,
+    body: string,
+    options?: ThreadOptions,
+  ): Promise<SentMessageInfo> {
     const to = options?.to ?? originalSender(originalMessage, 'thread');
     const { inReplyTo, references } = threadingHeaders(originalMessage);
 

@@ -6,7 +6,7 @@
 
 import type { ProtonMailSkill } from './index';
 
-export function registerTools(_skill: ProtonMailSkill) {
+export function registerTools(_skill: ProtonMailSkill): void {
   // TODO: Register tools with OpenClaw's tool registry
   // This will depend on OpenClaw's skill API
   // Example tool structure (adjust to match OpenClaw's actual API):
@@ -25,8 +25,32 @@ export function registerTools(_skill: ProtonMailSkill) {
   */
 }
 
+/** One parameter of a documented tool */
+export interface ToolParameter {
+  /** The JSON type the parameter carries */
+  type: 'string' | 'number' | 'boolean';
+
+  /** The call is rejected without it */
+  required?: boolean;
+
+  /** The call is accepted without it */
+  optional?: boolean;
+
+  /** What an omitted optional parameter falls back to */
+  default?: string | number | boolean;
+}
+
+/** A tool as this skill documents it, keyed by tool name */
+export interface ToolDefinition {
+  /** One line, shown wherever the tool is listed */
+  description: string;
+
+  /** Parameters by name */
+  parameters: Record<string, ToolParameter>;
+}
+
 // Tool definitions for documentation
-export const TOOL_DEFINITIONS = {
+export const TOOL_DEFINITIONS: Record<string, ToolDefinition> = {
   'protonmail-list-inbox': {
     description: 'List recent emails from inbox',
     parameters: {

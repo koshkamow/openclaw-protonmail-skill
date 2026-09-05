@@ -11,6 +11,7 @@
  */
 
 import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { AddressObject, EmailAddress, ParsedMail } from 'mailparser';
 import type { SendMailOptions } from 'nodemailer';
 
 // ---------------------------------------------------------------------------
@@ -33,7 +34,9 @@ const { SMTPClient } = await import('../src/smtp');
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function makeSmtp() {
+// SMTPClient arrives through a dynamic import, so the binding is a value and
+// the instance type is reached through it rather than by name.
+function makeSmtp(): InstanceType<typeof SMTPClient> {
   return new SMTPClient({
     host: '127.0.0.1',
     port: 1025,
@@ -42,13 +45,28 @@ function makeSmtp() {
   });
 }
 
-/** Build a minimal mailparser-shaped ParsedMail object */
-function parsedMail(overrides: Record<string, any> = {}) {
+/** An address header in mailparser's shape: the list, plus its two renderings */
+function addresses(...value: EmailAddress[]): AddressObject {
+  const text = value.map((a) => (a.name ? `${a.name} <${a.address}>` : `${a.address}`)).join(', ');
+  return { value, text, html: text };
+}
+
+/**
+ * Build a ParsedMail, overriding whichever fields a test cares about.
+ *
+ * @remarks
+ * Typed as the real ParsedMail rather than a loose object, so the four fields
+ * mailparser always sets — attachments, headers, headerLines, html — are here
+ * whether or not a test reads them, and an override that does not fit the
+ * library's shape fails to compile instead of at the assertion.
+ */
+function parsedMail(overrides: Partial<ParsedMail> = {}): ParsedMail {
   return {
-    from: {
-      value: [{ address: 'alice@example.com', name: 'Alice' }],
-      text: 'Alice <alice@example.com>',
-    },
+    attachments: [],
+    headers: new Map(),
+    headerLines: [],
+    html: false,
+    from: addresses({ address: 'alice@example.com', name: 'Alice' }),
     replyTo: undefined,
     subject: 'Original subject',
     messageId: '<original-msg-id@example.com>',
@@ -79,7 +97,7 @@ describe('SMTPClient.reply()', () => {
   it('prefers replyTo.value[0].address over from when present', async () => {
     const smtp = makeSmtp();
     const original = parsedMail({
-      replyTo: { value: [{ address: 'noreply@lists.example.com', name: '' }] },
+      replyTo: addresses({ address: 'noreply@lists.example.com', name: '' }),
     });
 
     await smtp.reply(original, 'Hello back');
@@ -167,7 +185,7 @@ describe('SMTPClient.reply()', () => {
 
   it('throws when no From or Reply-To address is available', async () => {
     const smtp = makeSmtp();
-    const broken = parsedMail({ from: { value: [] }, replyTo: undefined });
+    const broken = parsedMail({ from: addresses(), replyTo: undefined });
 
     await expect(smtp.reply(broken, 'Hi')).rejects.toThrow('could not determine recipient');
   });
