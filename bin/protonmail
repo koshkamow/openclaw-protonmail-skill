@@ -14,6 +14,7 @@
  *   protonmail list-folders [--kind=folder|label|system|all]
  *   protonmail create-folder <name> [--label]
  *   protonmail delete-folder <name> [--label]
+ *   protonmail thread <uid> --body=<body> [--to=<email>] [--cc=] [--bcc=] [--attach=<path> ...]
  *   protonmail mark-read <uid> [--mailbox=<path>]
  *   protonmail mark-unread <uid> [--mailbox=<path>]
  *   protonmail star <uid> [--mailbox=<path>]
@@ -34,6 +35,7 @@ const COMMANDS = [
   '  list-folders [--kind=folder|label|system|all]',
   '  create-folder <name> [--label]',
   '  delete-folder <name> [--label]',
+  '  thread <uid> --body= [--to=] [--cc=] [--bcc=] [--attach=<path> ...]',
   '  mark-read <uid> [--mailbox=<path>]',
   '  mark-unread <uid> [--mailbox=<path>]',
   '  star <uid> [--mailbox=<path>]',
@@ -200,6 +202,24 @@ async function main() {
         }
 
         const result = await skill.deleteMailbox(name, mailboxKind(args));
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'thread': {
+        const uid = requireUid(args, command);
+        const body = getArg(args, 'body');
+        if (!body) {
+          console.error('Error: thread requires <uid> and --body');
+          process.exit(1);
+        }
+
+        const result = await skill.continueThread(uid, body, {
+          to: getArg(args, 'to') || undefined,
+          cc: getArg(args, 'cc') || undefined,
+          bcc: getArg(args, 'bcc') || undefined,
+          attachments,
+        });
         console.log(JSON.stringify(result, null, 2));
         break;
       }

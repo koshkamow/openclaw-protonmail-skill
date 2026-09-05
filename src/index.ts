@@ -24,7 +24,7 @@
 
 import { IMAPClient } from './imap';
 import { SMTPClient } from './smtp';
-import type { ReplyOptions } from './smtp';
+import type { ReplyOptions, ThreadOptions } from './smtp';
 import { bridgeTlsOptions } from './bridge-tls';
 import { resolveMailboxPath, resolveTargetMailbox } from './mailboxes';
 import type { MailboxInfo } from './mailboxes';
@@ -46,7 +46,13 @@ export {
 } from './mailboxes';
 export type { MailboxInfo, MailboxKind } from './mailboxes';
 
-export type { ReplyOptions, SendOptions } from './smtp';
+export type { ReplyOptions, ThreadOptions, SendOptions } from './smtp';
+export {
+  threadingHeaders,
+  replySubject,
+  threadSubject,
+} from './threading';
+export type { ThreadingHeaders, ThreadableMessage } from './threading';
 export {
   resolveAttachments,
   pickAttachment,
@@ -272,6 +278,25 @@ export class ProtonMailSkill {
   async replyToEmail(messageId: string, body: string, options?: ReplyOptions): Promise<any> {
     const original = await this.imap.readMessage(messageId);
     return this.smtp.reply(original, body, options);
+  }
+
+  /**
+   * Send a new message into an existing conversation
+   *
+   * @param messageId - UID of a message in the conversation to continue
+   * @param body - Message text
+   * @param options - Recipients and attachments
+   * @returns Send result
+   *
+   * @remarks
+   * Where replyToEmail answers the sender under a `Re: ` subject, this carries
+   * the subject byte for byte and lets the recipients be set. Proton groups a
+   * conversation by subject plus participants, so an unchanged subject is what
+   * keeps the message in the thread in its UI.
+   */
+  async continueThread(messageId: string, body: string, options?: ThreadOptions): Promise<any> {
+    const original = await this.imap.readMessage(messageId);
+    return this.smtp.continueThread(original, body, options);
   }
 
   // ========================================

@@ -11,6 +11,8 @@ import nodemailer from 'nodemailer';
 import type { Transporter, SendMailOptions } from 'nodemailer';
 import type { PeerCertificate } from 'tls';
 
+import { threadingHeaders, replySubject, threadSubject } from './threading';
+
 /**
  * SMTP connection configuration
  */
@@ -86,6 +88,49 @@ export interface SendOptions {
 export interface ReplyOptions {
   /** File attachments */
   attachments?: SendOptions['attachments'];
+}
+
+/**
+ * Options for continuing an existing conversation
+ *
+ * @remarks
+ * Unlike {@link ReplyOptions}, recipients can be set: a message brought into
+ * a thread may need to reach someone who was not on the original.
+ */
+export interface ThreadOptions {
+  /** Recipients; defaults to the original sender */
+  to?: string | string[];
+
+  /** CC recipients */
+  cc?: string | string[];
+
+  /** BCC recipients */
+  bcc?: string | string[];
+
+  /** File attachments */
+  attachments?: SendOptions['attachments'];
+}
+
+/**
+ * The address a reply to this message should go to.
+ *
+ * @remarks
+ * mailparser's ParsedMail shapes From and Reply-To as AddressObject, not as
+ * arrays. The address lives at `.value[0].address` — not `[0].address`, which
+ * is the bug this once had.
+ */
+function originalSender(originalMessage: any, verb: string): string {
+  const address =
+    originalMessage?.replyTo?.value?.[0]?.address ||
+    originalMessage?.from?.value?.[0]?.address;
+
+  if (!address) {
+    throw new Error(
+      `${verb}: could not determine recipient — original message has no From or Reply-To address`
+    );
+  }
+
+  return address;
 }
 
 /**
@@ -168,15 +213,13 @@ export class SMTPClient {
    * @returns Send result
    * 
    * @throws {Error} If reply fails
-   * 
-   * @todo Implement full threading headers (In-Reply-To, References)
-   * 
+   *
    * @remarks
    * This method automatically:
    * - Extracts the original sender from Reply-To or From header
    * - Prepends "Re: " to subject if not already present
    * - Sets In-Reply-To and References headers for proper threading
-   * 
+   *
    * @example
    * ```typescript
    * const original = await imap.readMessage('1234');
@@ -184,41 +227,62 @@ export class SMTPClient {
    * ```
    */
   async reply(originalMessage: any, body: string, options?: ReplyOptions): Promise<any> {
-    // mailparser's ParsedMail shapes From and Reply-To as AddressObject,
-    // not as arrays. The address lives at .value[0].address — not [0].address.
-    //
-    // Wrong (was):  originalMessage.from?.[0]?.address
-    // Correct:      originalMessage.from?.value?.[0]?.address
-    const replyTo =
-      originalMessage.replyTo?.value?.[0]?.address ||
-      originalMessage.from?.value?.[0]?.address;
-
-    if (!replyTo) {
-      throw new Error(
-        'reply: could not determine recipient — original message has no From or Reply-To address'
-      );
-    }
-
-    const subject = originalMessage.subject?.startsWith('Re: ')
-      ? originalMessage.subject
-      : `Re: ${originalMessage.subject ?? ''}`;
-
-    // References should be a space-separated string per RFC 5322.
-    // mailparser may return it as string[] or string; normalise to string.
-    const existingRefs: string = Array.isArray(originalMessage.references)
-      ? originalMessage.references.join(' ')
-      : originalMessage.references ?? '';
-
-    const references = existingRefs
-      ? `${existingRefs} ${originalMessage.messageId}`
-      : originalMessage.messageId;
+    const to = originalSender(originalMessage, 'reply');
+    const { inReplyTo, references } = threadingHeaders(originalMessage);
 
     const mailOptions: SendMailOptions = {
       from: this.config.auth.user,
-      to: replyTo,
-      subject,
+      to,
+      subject: replySubject(originalMessage.subject),
       text: body,
-      inReplyTo: originalMessage.messageId,
+      inReplyTo,
+      references,
+      attachments: options?.attachments,
+    };
+
+    return this.transporter.sendMail(mailOptions);
+  }
+
+  /**
+   * Send a new message into an existing conversation
+   *
+   * @param originalMessage - A message from the conversation to continue
+   * @param body - Message text
+   * @param options - Recipients and attachments; recipients default to the
+   *   original sender
+   * @returns Send result
+   *
+   * @throws {Error} If no recipient can be determined
+   *
+   * @remarks
+   * Distinct from {@link reply} in the two ways that decide where the message
+   * lands. The subject is carried byte for byte rather than prefixed, because
+   * Proton groups a conversation by subject plus participants and any drift
+   * starts a new one in its UI. And the recipients can be set, so a message
+   * can be brought to someone else without leaving the thread.
+   *
+   * @example
+   * ```typescript
+   * const original = await imap.readMessage('1234');
+   * await smtp.continueThread(original, 'Adding Bob.', { to: 'bob@example.com' });
+   * ```
+   */
+  async continueThread(
+    originalMessage: any,
+    body: string,
+    options?: ThreadOptions
+  ): Promise<any> {
+    const to = options?.to ?? originalSender(originalMessage, 'thread');
+    const { inReplyTo, references } = threadingHeaders(originalMessage);
+
+    const mailOptions: SendMailOptions = {
+      from: this.config.auth.user,
+      to,
+      cc: options?.cc,
+      bcc: options?.bcc,
+      subject: threadSubject(originalMessage.subject),
+      text: body,
+      inReplyTo,
       references,
       attachments: options?.attachments,
     };

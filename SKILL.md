@@ -111,6 +111,33 @@ error rather than a silent guess. Proton's own mailboxes (`INBOX`, `Sent`,
 `Drafts`, `Archive`, `Spam`, `Trash`, `All Mail`, `Starred`) and the two tree
 roots cannot be created or deleted.
 
+### Continuing a conversation
+
+`reply` answers the sender under a `Re: ` subject. `thread` sends a **new**
+message into an existing conversation, and differs in the two ways that decide
+where it lands:
+
+```bash
+# Continue the conversation that <uid> belongs to
+protonmail thread <uid> --body="One more thing."
+
+# Bring someone else into it without starting a new thread
+protonmail thread <uid> --body="Adding Bob." --to=bob@example.com
+
+# Attachments and cc/bcc work here too
+protonmail thread <uid> --body="Numbers attached." --attach=/path/q3.pdf --cc=carol@example.com
+```
+
+The subject is carried **byte for byte** — no `Re: ` added, no whitespace
+tidied. `In-Reply-To` and `References` are taken from the message named,
+extending the chain rather than restating it.
+
+Both matter, and for different reasons. The headers are what any
+standards-respecting client threads on; the unchanged subject is what Proton's
+own UI needs, because it groups a conversation by subject *plus participants*.
+A subject that drifts splits the thread in Proton even when the headers are
+right.
+
 ### Message state
 
 ```bash

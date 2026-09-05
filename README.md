@@ -216,6 +216,7 @@ openclaw-protonmail-skill/
 │   ├── smtp.ts       # SMTP client for sending emails
 │   ├── attachments.ts # --attach / --attachment helpers
 │   ├── mailboxes.ts  # Folders/Labels tree rules and guards
+│   ├── threading.ts  # In-Reply-To / References and subject rules
 │   ├── bridge-tls.ts # TLS options for Bridge's self-signed cert
 │   └── tools.ts      # Tool definitions for OpenClaw
 ├── test/

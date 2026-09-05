@@ -171,11 +171,105 @@ describe('SMTPClient.reply()', () => {
     );
   });
 
+  it('sends no threading headers when the original has no Message-ID', async () => {
+    const smtp = makeSmtp();
+    await smtp.reply(parsedMail({ messageId: undefined }), 'Hi');
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.inReplyTo).toBeUndefined();
+    expect(sent.references).toBeUndefined();
+  });
+
   it('does not call sendMail when recipient extraction fails', async () => {
     const smtp = makeSmtp();
     const broken = parsedMail({ from: undefined, replyTo: undefined });
 
     await expect(smtp.reply(broken, 'Hi')).rejects.toThrow();
     expect(mockSendMail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// continueThread() — a new message into an existing conversation
+// ---------------------------------------------------------------------------
+describe('SMTPClient.continueThread()', () => {
+  beforeEach(() => {
+    mockSendMail.mockClear();
+    transport.createTransport.mockClear();
+  });
+
+  it('carries the subject byte for byte, with no Re: prefix', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail(), 'Still on this.');
+
+    expect(mockSendMail.mock.calls[0][0].subject).toBe('Original subject');
+  });
+
+  it('leaves an existing Re: subject exactly as it found it', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail({ subject: 'Re: Original subject' }), 'More.');
+
+    expect(mockSendMail.mock.calls[0][0].subject).toBe('Re: Original subject');
+  });
+
+  it('sets the threading headers from the original', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(
+      parsedMail({ references: ['<first@example.com>'] }),
+      'More.'
+    );
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
+    expect(sent.references).toBe('<first@example.com> <original-msg-id@example.com>');
+  });
+
+  it('defaults the recipient to the original sender', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail(), 'More.');
+
+    expect(mockSendMail.mock.calls[0][0].to).toBe('alice@example.com');
+  });
+
+  it('sends to an explicit recipient instead, without leaving the thread', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail(), 'Adding Bob.', { to: 'bob@example.com' });
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.to).toBe('bob@example.com');
+    expect(sent.subject).toBe('Original subject');
+    expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
+  });
+
+  it('passes cc, bcc and attachments through', async () => {
+    const smtp = makeSmtp();
+    const attachments = [{ filename: 'report.pdf', path: '/tmp/report.pdf' }];
+
+    await smtp.continueThread(parsedMail(), 'With a file.', {
+      cc: 'carol@example.com',
+      bcc: 'dan@example.com',
+      attachments,
+    });
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.cc).toBe('carol@example.com');
+    expect(sent.bcc).toBe('dan@example.com');
+    expect(sent.attachments).toEqual(attachments);
+  });
+
+  it('throws when no recipient can be determined and none was given', async () => {
+    const smtp = makeSmtp();
+    await expect(
+      smtp.continueThread(parsedMail({ from: undefined }), 'Hi')
+    ).rejects.toThrow('thread: could not determine recipient');
+  });
+
+  it('still sends when the original has no sender but a recipient was given', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail({ from: undefined }), 'Hi', {
+      to: 'bob@example.com',
+    });
+
+    expect(mockSendMail.mock.calls[0][0].to).toBe('bob@example.com');
   });
 });
