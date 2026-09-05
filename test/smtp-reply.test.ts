@@ -10,7 +10,7 @@
  * not as EmailAddress[]. The correct path is `from?.value?.[0]?.address`.
  */
 
-import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
 import type { SendMailOptions } from 'nodemailer';
 
 // ---------------------------------------------------------------------------
@@ -45,7 +45,10 @@ function makeSmtp() {
 /** Build a minimal mailparser-shaped ParsedMail object */
 function parsedMail(overrides: Record<string, any> = {}) {
   return {
-    from: { value: [{ address: 'alice@example.com', name: 'Alice' }], text: 'Alice <alice@example.com>' },
+    from: {
+      value: [{ address: 'alice@example.com', name: 'Alice' }],
+      text: 'Alice <alice@example.com>',
+    },
     replyTo: undefined,
     subject: 'Original subject',
     messageId: '<original-msg-id@example.com>',
@@ -113,7 +116,7 @@ describe('SMTPClient.reply()', () => {
 
     const sent = mockSendMail.mock.calls[0][0];
     expect(sent.references).toBe(
-      '<first@example.com> <second@example.com> <original-msg-id@example.com>'
+      '<first@example.com> <second@example.com> <original-msg-id@example.com>',
     );
   });
 
@@ -166,9 +169,7 @@ describe('SMTPClient.reply()', () => {
     const smtp = makeSmtp();
     const broken = parsedMail({ from: { value: [] }, replyTo: undefined });
 
-    await expect(smtp.reply(broken, 'Hi')).rejects.toThrow(
-      'could not determine recipient'
-    );
+    await expect(smtp.reply(broken, 'Hi')).rejects.toThrow('could not determine recipient');
   });
 
   it('sends no threading headers when the original has no Message-ID', async () => {
@@ -214,10 +215,7 @@ describe('SMTPClient.continueThread()', () => {
 
   it('sets the threading headers from the original', async () => {
     const smtp = makeSmtp();
-    await smtp.continueThread(
-      parsedMail({ references: ['<first@example.com>'] }),
-      'More.'
-    );
+    await smtp.continueThread(parsedMail({ references: ['<first@example.com>'] }), 'More.');
 
     const sent = mockSendMail.mock.calls[0][0];
     expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
@@ -259,9 +257,9 @@ describe('SMTPClient.continueThread()', () => {
 
   it('throws when no recipient can be determined and none was given', async () => {
     const smtp = makeSmtp();
-    await expect(
-      smtp.continueThread(parsedMail({ from: undefined }), 'Hi')
-    ).rejects.toThrow('thread: could not determine recipient');
+    await expect(smtp.continueThread(parsedMail({ from: undefined }), 'Hi')).rejects.toThrow(
+      'thread: could not determine recipient',
+    );
   });
 
   it('still sends when the original has no sender but a recipient was given', async () => {

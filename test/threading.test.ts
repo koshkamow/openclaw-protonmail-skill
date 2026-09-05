@@ -6,9 +6,9 @@
  * drifted. Both are asserted here.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
-import { threadingHeaders, replySubject, threadSubject } from '../src/threading';
+import { replySubject, threadingHeaders, threadSubject } from '../src/threading';
 
 describe('threadingHeaders()', () => {
   it('names the original message in In-Reply-To', () => {

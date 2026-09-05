@@ -5,18 +5,18 @@
  * mailbox, so they are asserted directly rather than left to the live checks.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 import type { MailboxInfo } from '../src/mailboxes';
 import {
-  classifyMailbox,
-  resolveMailboxPath,
-  resolveTargetMailbox,
   assertDeletable,
   assertRelocatableSource,
-  MailboxError,
+  classifyMailbox,
   FOLDERS_ROOT,
   LABELS_ROOT,
+  MailboxError,
+  resolveMailboxPath,
+  resolveTargetMailbox,
 } from '../src/mailboxes';
 
 describe('classifyMailbox()', () => {
@@ -89,16 +89,23 @@ describe('resolveMailboxPath()', () => {
   });
 
   it('rejects control characters, which could inject a command', () => {
-    expect(() => resolveMailboxPath('Rec\r\nA1 LOGOUT', 'folder')).toThrow(
-      'invalid characters'
-    );
+    expect(() => resolveMailboxPath('Rec\r\nA1 LOGOUT', 'folder')).toThrow('invalid characters');
   });
 
   it('refuses a bare system mailbox name rather than prefixing it', () => {
     // Regression: these used to resolve to Folders/INBOX — a mailbox that does
     // not exist — so `delete-folder INBOX` reported "not found" and the guard
     // against deleting system mailboxes was unreachable from the CLI.
-    for (const box of ['INBOX', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash', 'All Mail', 'Starred']) {
+    for (const box of [
+      'INBOX',
+      'Sent',
+      'Drafts',
+      'Archive',
+      'Spam',
+      'Trash',
+      'All Mail',
+      'Starred',
+    ]) {
       expect(() => resolveMailboxPath(box, 'folder')).toThrow('system mailbox');
       expect(() => resolveMailboxPath(box, 'label')).toThrow('system mailbox');
     }
@@ -127,7 +134,13 @@ describe('resolveTargetMailbox()', () => {
     { path: 'Trash', name: 'Trash', kind: 'system', specialUse: '\\Trash', selectable: true },
     { path: 'Folders', name: 'Folders', kind: 'container', specialUse: null, selectable: false },
     { path: 'Labels', name: 'Labels', kind: 'container', specialUse: null, selectable: false },
-    { path: 'Folders/Receipts', name: 'Receipts', kind: 'folder', specialUse: null, selectable: true },
+    {
+      path: 'Folders/Receipts',
+      name: 'Receipts',
+      kind: 'folder',
+      specialUse: null,
+      selectable: true,
+    },
     { path: 'Labels/Urgent', name: 'Urgent', kind: 'label', specialUse: null, selectable: true },
     { path: 'Folders/Both', name: 'Both', kind: 'folder', specialUse: null, selectable: true },
     { path: 'Labels/Both', name: 'Both', kind: 'label', specialUse: null, selectable: true },
@@ -214,7 +227,16 @@ describe('assertDeletable()', () => {
   });
 
   it('refuses each Proton system mailbox', () => {
-    for (const box of ['INBOX', 'Sent', 'Drafts', 'Archive', 'Spam', 'Trash', 'All Mail', 'Starred']) {
+    for (const box of [
+      'INBOX',
+      'Sent',
+      'Drafts',
+      'Archive',
+      'Spam',
+      'Trash',
+      'All Mail',
+      'Starred',
+    ]) {
       expect(() => assertDeletable(box)).toThrow('system mailbox');
     }
   });

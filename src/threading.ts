@@ -60,7 +60,7 @@ export function threadingHeaders(original: ThreadableMessage): ThreadingHeaders 
 
   const existing = Array.isArray(original.references)
     ? original.references.join(' ')
-    : original.references ?? '';
+    : (original.references ?? '');
 
   return {
     inReplyTo: messageId,

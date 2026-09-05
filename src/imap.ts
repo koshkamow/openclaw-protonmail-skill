@@ -7,11 +7,12 @@
  * @packageDocumentation
  */
 
-import { ImapFlow } from 'imapflow';
 import type { MailboxLockObject, SearchObject } from 'imapflow';
-import { simpleParser, ParsedMail } from 'mailparser';
+import { ImapFlow } from 'imapflow';
+import { type ParsedMail, simpleParser } from 'mailparser';
 
 import { bridgeTlsOptions } from './bridge-tls';
+import type { MailboxInfo } from './mailboxes';
 import {
   assertDeletable,
   assertRelocatableSource,
@@ -20,7 +21,6 @@ import {
   STARRED_MAILBOX,
   TRASH_MAILBOX,
 } from './mailboxes';
-import type { MailboxInfo } from './mailboxes';
 
 /**
  * IMAP connection configuration
@@ -120,8 +120,10 @@ export function parseSearchQuery(query: string): SearchObject {
 
   // Parse supported key:value filters with quoted or unquoted values
   const filterRegex = /(from|subject|body):(?:"([^"]{1,200})"|([^\s]{1,200}))/gi;
-  let match: RegExpExecArray | null;
-  while ((match = filterRegex.exec(q)) !== null) {
+  // matchAll rather than a while-exec loop: exec carries its position in the
+  // regex's own lastIndex, so a `continue` past the re-assignment would spin
+  // forever on the same match.
+  for (const match of q.matchAll(filterRegex)) {
     const key = match[1].toLowerCase();
     const rawValue = (match[2] || match[3] || '').trim();
     const value = sanitizeSearchValue(rawValue);
@@ -147,7 +149,7 @@ export function parseSearchQuery(query: string): SearchObject {
   // If no supported filters, do safe keyword subject search
   if (terms.length === 0) {
     const fallback = sanitizeSearchValue(
-      q.replace(/(from|subject|body|newer_than):[^\s]+/gi, '').trim()
+      q.replace(/(from|subject|body|newer_than):[^\s]+/gi, '').trim(),
     );
     if (!fallback) {
       throw new Error('Search query is empty or contains unsupported characters');
@@ -172,7 +174,7 @@ export function sanitizeSearchInput(input: string): string {
   }
   // Block CR/LF and control chars. The class is the point of this guard,
   // so the rule that objects to control characters is off for this line.
-  // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the class being matched is the guard
   if (/[\r\n\x00-\x1F\x7F]/.test(trimmed)) {
     throw new Error('Search query contains invalid control characters');
   }
@@ -290,7 +292,7 @@ export class IMAPClient {
   private async withMailbox<T>(
     mailbox: string,
     readOnly: boolean,
-    fn: (client: ImapFlow) => Promise<T>
+    fn: (client: ImapFlow) => Promise<T>,
   ): Promise<T> {
     const client = this.requireClient();
     const lock: MailboxLockObject = await client.getMailboxLock(mailbox, { readOnly });
@@ -315,7 +317,7 @@ export class IMAPClient {
     for await (const msg of client.fetch(
       uids.join(','),
       { uid: true, flags: true, envelope: true },
-      { uid: true }
+      { uid: true },
     )) {
       emails.push({
         uid: String(msg.uid),
@@ -465,7 +467,11 @@ export class IMAPClient {
    *
    * @throws {Error} If the UID is not in the mailbox
    */
-  async markRead(uid: string, read: boolean, mailbox = 'INBOX'): Promise<{ uid: string; read: boolean }> {
+  async markRead(
+    uid: string,
+    read: boolean,
+    mailbox = 'INBOX',
+  ): Promise<{ uid: string; read: boolean }> {
     return this.withMailbox(mailbox, false, async (client) => {
       await this.assertMessageExists(client, uid, mailbox);
 
@@ -492,7 +498,10 @@ export class IMAPClient {
    * reverts the flag within about fifteen seconds, because the label is the
    * state and the flag only reflects it.
    */
-  async star(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
+  async star(
+    uid: string,
+    mailbox = 'INBOX',
+  ): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
     const messageId = await this.messageIdOf(uid, mailbox);
     const existing = await this.findByMessageId(STARRED_MAILBOX, messageId);
 
@@ -519,7 +528,10 @@ export class IMAPClient {
    * rather than the message: the message stays where it lives. The copy is
    * found by Message-ID, since `Starred` has its own UID space.
    */
-  async unstar(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
+  async unstar(
+    uid: string,
+    mailbox = 'INBOX',
+  ): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
     const messageId = await this.messageIdOf(uid, mailbox);
     const starredUids = await this.findByMessageId(STARRED_MAILBOX, messageId);
 
@@ -551,7 +563,7 @@ export class IMAPClient {
   async moveMessage(
     uid: string,
     target: string,
-    mailbox = 'INBOX'
+    mailbox = 'INBOX',
   ): Promise<{ uid: string; from: string; to: string; newUid: string | null }> {
     // A label is a projection, not a storage location; see
     // assertRelocatableSource for what MOVE against one was measured to do.
@@ -594,7 +606,7 @@ export class IMAPClient {
   async deleteMessage(
     uid: string,
     permanent = false,
-    mailbox = 'INBOX'
+    mailbox = 'INBOX',
   ): Promise<{ uid: string; deleted: 'trashed' | 'expunged'; to: string | null }> {
     assertRelocatableSource(mailbox);
 
@@ -639,7 +651,9 @@ export class IMAPClient {
 
       const messageId = msg.envelope?.messageId;
       if (!messageId) {
-        throw new Error(`Message UID ${uid} has no Message-ID, so it cannot be matched across mailboxes`);
+        throw new Error(
+          `Message UID ${uid} has no Message-ID, so it cannot be matched across mailboxes`,
+        );
       }
 
       return messageId;
@@ -679,7 +693,9 @@ export class IMAPClient {
     return this.withMailbox(mailbox, true, async (client) => {
       const msg = await client.fetchOne(messageId, { source: true }, { uid: true });
 
-      if (!msg || !msg.source) {
+      // fetchOne answers `false` when nothing matched, which is not nullish —
+      // so this is an explicit comparison rather than an optional chain.
+      if (msg === false || !msg.source) {
         throw new Error(`Message UID ${messageId} not found in ${mailbox}`);
       }
 

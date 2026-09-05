@@ -156,7 +156,7 @@ export function resolveMailboxPath(name: string, kind: 'folder' | 'label'): stri
 
   // A path separator is meaningful (nesting); a control character or a
   // wildcard is not, and would be interpreted by the server.
-  // eslint-disable-next-line no-control-regex
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: the class being matched is the guard
   if (/[\r\n\x00-\x1F\x7F*%"]/.test(trimmed)) {
     throw new MailboxError(`mailbox name contains invalid characters: ${name}`);
   }
@@ -175,7 +175,7 @@ export function resolveMailboxPath(name: string, kind: 'folder' | 'label'): stri
   if (trimmed.startsWith(`${other}/`)) {
     throw new MailboxError(
       `'${trimmed}' is a ${other === LABELS_ROOT ? 'label' : 'folder'}, ` +
-        `but this command was told ${kind}`
+        `but this command was told ${kind}`,
     );
   }
 
@@ -188,9 +188,7 @@ export function resolveMailboxPath(name: string, kind: 'folder' | 'label'): stri
   // touching system mailboxes would never see the name the user typed, and
   // `delete-folder INBOX` would report "not found" rather than why it refused.
   if (isSystemMailbox(trimmed)) {
-    throw new MailboxError(
-      `'${trimmed}' is a Proton system mailbox, not a ${kind}`
-    );
+    throw new MailboxError(`'${trimmed}' is a Proton system mailbox, not a ${kind}`);
   }
 
   return `${wanted}/${trimmed}`;
@@ -236,7 +234,7 @@ export function resolveTargetMailbox(name: string, existing: MailboxInfo[]): str
   const candidates = selectable.filter(
     (box) =>
       box.path.toLowerCase() === `${FOLDERS_ROOT}/${trimmed}`.toLowerCase() ||
-      box.path.toLowerCase() === `${LABELS_ROOT}/${trimmed}`.toLowerCase()
+      box.path.toLowerCase() === `${LABELS_ROOT}/${trimmed}`.toLowerCase(),
   );
 
   if (candidates.length === 1) return candidates[0].path;
@@ -244,22 +242,22 @@ export function resolveTargetMailbox(name: string, existing: MailboxInfo[]): str
   if (candidates.length > 1) {
     throw new MailboxError(
       `'${trimmed}' is both a folder and a label; give the full path ` +
-        `(${candidates.map((c) => c.path).join(' or ')})`
+        `(${candidates.map((c) => c.path).join(' or ')})`,
     );
   }
 
   // Named something that exists but cannot hold messages — a tree root.
   const unselectable = existing.find(
-    (box) => !box.selectable && box.path.toLowerCase() === trimmed.toLowerCase()
+    (box) => !box.selectable && box.path.toLowerCase() === trimmed.toLowerCase(),
   );
   if (unselectable) {
     throw new MailboxError(
-      `'${unselectable.path}' cannot hold messages; it is the tree holding others`
+      `'${unselectable.path}' cannot hold messages; it is the tree holding others`,
     );
   }
 
   throw new MailboxError(
-    `mailbox not found: ${trimmed}\nAvailable: ${selectable.map((b) => b.path).join(', ')}`
+    `mailbox not found: ${trimmed}\nAvailable: ${selectable.map((b) => b.path).join(', ')}`,
   );
 }
 
@@ -294,7 +292,7 @@ export function assertRelocatableSource(path: string): void {
   if (trimmed === STARRED_MAILBOX) {
     throw new MailboxError(
       `'${STARRED_MAILBOX}' holds starred messages rather than storing them; ` +
-        `use unstar to remove a star, or act on the mailbox the message lives in`
+        `use unstar to remove a star, or act on the mailbox the message lives in`,
     );
   }
 
@@ -303,7 +301,7 @@ export function assertRelocatableSource(path: string): void {
       `'${trimmed}' is a label, not a folder. A message is stored in a folder ` +
         `and carries labels, so moving or deleting it out of a label would ` +
         `relocate the message itself and drop the label as a side effect. ` +
-        `Act on the folder the message lives in instead.`
+        `Act on the folder the message lives in instead.`,
     );
   }
 }
@@ -325,7 +323,7 @@ export function assertDeletable(path: string): void {
   if (trimmed === FOLDERS_ROOT || trimmed === LABELS_ROOT) {
     throw new MailboxError(
       `refusing to delete '${trimmed}': it is the tree holding every user ` +
-        `${trimmed === FOLDERS_ROOT ? 'folder' : 'label'}`
+        `${trimmed === FOLDERS_ROOT ? 'folder' : 'label'}`,
     );
   }
 

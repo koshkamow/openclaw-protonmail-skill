@@ -8,8 +8,8 @@
  * @packageDocumentation
  */
 
-import fs from 'fs';
-import path from 'path';
+import fs from 'node:fs';
+import path from 'node:path';
 
 /**
  * A file to attach, in the shape nodemailer accepts.

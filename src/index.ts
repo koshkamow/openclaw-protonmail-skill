@@ -1,64 +1,63 @@
 /**
  * ProtonMail Skill for OpenClaw
- * 
+ *
  * Provides secure email integration through Proton Mail Bridge.
  * Bridge runs locally and provides IMAP/SMTP access to your ProtonMail account
  * while maintaining end-to-end encryption.
- * 
+ *
  * @packageDocumentation
- * 
+ *
  * @example
  * ```typescript
  * import ProtonMailSkill from 'openclaw-protonmail-skill';
- * 
+ *
  * const skill = new ProtonMailSkill({
  *   account: 'user@pm.me',
  *   bridgePassword: 'bridge-generated-password'
  * });
- * 
+ *
  * await skill.initialize();
  * const inbox = await skill.listInbox(10);
  * await skill.cleanup();
  * ```
  */
 
-import { IMAPClient } from './imap';
-import { SMTPClient } from './smtp';
-import type { ReplyOptions, ThreadOptions } from './smtp';
 import { bridgeTlsOptions } from './bridge-tls';
-import { resolveMailboxPath, resolveTargetMailbox } from './mailboxes';
+import { IMAPClient } from './imap';
 import type { MailboxInfo } from './mailboxes';
+import { resolveMailboxPath, resolveTargetMailbox } from './mailboxes';
+import type { ReplyOptions, ThreadOptions } from './smtp';
+import { SMTPClient } from './smtp';
 import { registerTools } from './tools';
 
-export { bridgeTlsOptions } from './bridge-tls';
+export type { ResolvedAttachment } from './attachments';
 export {
-  resolveMailboxPath,
-  resolveTargetMailbox,
-  classifyMailbox,
+  AttachmentError,
+  pickAttachment,
+  resolveAttachments,
+} from './attachments';
+export { bridgeTlsOptions } from './bridge-tls';
+export type { MailboxInfo, MailboxKind } from './mailboxes';
+export {
   assertDeletable,
   assertRelocatableSource,
-  isSystemMailbox,
-  MailboxError,
+  classifyMailbox,
   FOLDERS_ROOT,
+  isSystemMailbox,
   LABELS_ROOT,
+  MailboxError,
+  resolveMailboxPath,
+  resolveTargetMailbox,
   STARRED_MAILBOX,
   TRASH_MAILBOX,
 } from './mailboxes';
-export type { MailboxInfo, MailboxKind } from './mailboxes';
-
-export type { ReplyOptions, ThreadOptions, SendOptions } from './smtp';
+export type { ReplyOptions, SendOptions, ThreadOptions } from './smtp';
+export type { ThreadableMessage, ThreadingHeaders } from './threading';
 export {
-  threadingHeaders,
   replySubject,
+  threadingHeaders,
   threadSubject,
 } from './threading';
-export type { ThreadingHeaders, ThreadableMessage } from './threading';
-export {
-  resolveAttachments,
-  pickAttachment,
-  AttachmentError,
-} from './attachments';
-export type { ResolvedAttachment } from './attachments';
 
 /**
  * Configuration options for ProtonMail skill
@@ -66,19 +65,19 @@ export type { ResolvedAttachment } from './attachments';
 export interface ProtonMailConfig {
   /** ProtonMail account email (e.g., user@pm.me or user@protonmail.com) */
   account?: string;
-  
+
   /** Bridge-generated password (NOT your ProtonMail password) */
   bridgePassword?: string;
-  
+
   /** IMAP host (default: 127.0.0.1) */
   imapHost?: string;
-  
+
   /** IMAP port (default: 1143) */
   imapPort?: number;
-  
+
   /** SMTP host (default: 127.0.0.1) */
   smtpHost?: string;
-  
+
   /** SMTP port (default: 1025) */
   smtpPort?: number;
 }
@@ -86,31 +85,40 @@ export interface ProtonMailConfig {
 /**
  * Load configuration from environment variables or passed config
  */
-function loadConfig(config?: ProtonMailConfig): Required<Omit<ProtonMailConfig, 'account' | 'bridgePassword'>> & { account: string; bridgePassword: string } {
+function loadConfig(config?: ProtonMailConfig): Required<
+  Omit<ProtonMailConfig, 'account' | 'bridgePassword'>
+> & {
+  account: string;
+  bridgePassword: string;
+} {
   const account = config?.account || process.env.PROTONMAIL_ACCOUNT;
   const bridgePassword = config?.bridgePassword || process.env.PROTONMAIL_BRIDGE_PASSWORD;
-  
+
   if (!account) {
-    throw new Error('ProtonMail account not configured. Set PROTONMAIL_ACCOUNT env var or pass account in config.');
+    throw new Error(
+      'ProtonMail account not configured. Set PROTONMAIL_ACCOUNT env var or pass account in config.',
+    );
   }
-  
+
   if (!bridgePassword) {
-    throw new Error('ProtonMail Bridge password not configured. Set PROTONMAIL_BRIDGE_PASSWORD env var or pass bridgePassword in config.');
+    throw new Error(
+      'ProtonMail Bridge password not configured. Set PROTONMAIL_BRIDGE_PASSWORD env var or pass bridgePassword in config.',
+    );
   }
-  
+
   return {
     account,
     bridgePassword,
     imapHost: config?.imapHost || '127.0.0.1',
     imapPort: config?.imapPort || 1143,
     smtpHost: config?.smtpHost || '127.0.0.1',
-    smtpPort: config?.smtpPort || 1025
+    smtpPort: config?.smtpPort || 1025,
   };
 }
 
 /**
  * Main skill class for ProtonMail integration
- * 
+ *
  * Manages IMAP and SMTP connections to Proton Mail Bridge and provides
  * high-level email operations for OpenClaw.
  */
@@ -120,24 +128,26 @@ export class ProtonMailSkill {
 
   /**
    * Create a new ProtonMail skill instance
-   * 
+   *
    * @param config - Optional configuration. If not provided, reads from environment variables.
-   * 
+   *
    * @remarks
    * The Bridge password is separate from your ProtonMail password. Get it from
    * Proton Mail Bridge → Account Settings → Mailbox Configuration.
-   * 
+   *
    * Configuration priority:
    * 1. Passed config object
    * 2. Environment variables (PROTONMAIL_ACCOUNT, PROTONMAIL_BRIDGE_PASSWORD)
    */
   constructor(config?: ProtonMailConfig) {
     const fullConfig = loadConfig(config);
-    
+
     // Security hardening: Proton Bridge must be localhost-only
     const localHosts = new Set(['127.0.0.1', 'localhost', '::1']);
     if (!localHosts.has(fullConfig.imapHost) || !localHosts.has(fullConfig.smtpHost)) {
-      throw new Error('Unsafe Bridge host configuration. IMAP/SMTP hosts must be localhost (127.0.0.1, localhost, or ::1).');
+      throw new Error(
+        'Unsafe Bridge host configuration. IMAP/SMTP hosts must be localhost (127.0.0.1, localhost, or ::1).',
+      );
     }
 
     // secure: false means "connect in the clear, then STARTTLS" — the same
@@ -147,7 +157,7 @@ export class ProtonMailSkill {
       password: fullConfig.bridgePassword,
       host: fullConfig.imapHost,
       port: fullConfig.imapPort,
-      secure: false
+      secure: false,
     };
 
     // secure: false plus requireTLS means "connect in the clear, then insist on
@@ -161,8 +171,8 @@ export class ProtonMailSkill {
       tls: bridgeTlsOptions(fullConfig.smtpHost),
       auth: {
         user: fullConfig.account,
-        pass: fullConfig.bridgePassword
-      }
+        pass: fullConfig.bridgePassword,
+      },
     };
 
     this.imap = new IMAPClient(imapConfig);
@@ -171,9 +181,9 @@ export class ProtonMailSkill {
 
   /**
    * Initialize the skill and register tools with OpenClaw
-   * 
+   *
    * @throws {Error} If Bridge is not running or credentials are invalid
-   * 
+   *
    * @remarks
    * Ensure Proton Mail Bridge is running before calling this method.
    */
@@ -184,7 +194,7 @@ export class ProtonMailSkill {
 
   /**
    * Cleanup and disconnect from Bridge
-   * 
+   *
    * @remarks
    * Always call this when shutting down to cleanly close connections.
    */
@@ -198,11 +208,11 @@ export class ProtonMailSkill {
 
   /**
    * List recent emails from inbox
-   * 
+   *
    * @param limit - Maximum number of emails to return (default: 10)
    * @param unreadOnly - Only return unread emails (default: false)
    * @returns Array of email metadata (sender, subject, date, etc.)
-   * 
+   *
    * @example
    * ```typescript
    * const recent = await skill.listInbox(5, true); // 5 unread emails
@@ -214,11 +224,11 @@ export class ProtonMailSkill {
 
   /**
    * Search emails by query
-   * 
+   *
    * @param query - Search query (sender, subject, body keywords)
    * @param limit - Maximum results to return (default: 10)
    * @returns Matching emails
-   * 
+   *
    * @example
    * ```typescript
    * const results = await skill.searchEmails('from:alice@example.com', 20);
@@ -230,10 +240,10 @@ export class ProtonMailSkill {
 
   /**
    * Read a specific email by ID
-   * 
+   *
    * @param messageId - Message UID or sequence number
    * @returns Full email content (headers, body, attachments)
-   * 
+   *
    * @throws {Error} If message ID is invalid or email doesn't exist
    */
   async readEmail(messageId: string, mailbox = 'INBOX'): Promise<any> {
@@ -242,13 +252,13 @@ export class ProtonMailSkill {
 
   /**
    * Send a new email via ProtonMail
-   * 
+   *
    * @param to - Recipient email address
    * @param subject - Email subject
    * @param body - Email body (plain text)
    * @param options - Optional settings (CC, BCC, HTML, attachments)
    * @returns Send result
-   * 
+   *
    * @example
    * ```typescript
    * await skill.sendEmail(
@@ -265,12 +275,12 @@ export class ProtonMailSkill {
 
   /**
    * Reply to an existing email thread
-   * 
+   *
    * @param messageId - Original message ID to reply to
    * @param body - Reply text
    * @param options - Optional settings (attachments)
    * @returns Send result
-   * 
+   *
    * @remarks
    * Automatically sets Reply-To, In-Reply-To, and References headers
    * to maintain threading.
@@ -279,7 +289,7 @@ export class ProtonMailSkill {
     messageId: string,
     body: string,
     options?: ReplyOptions,
-    mailbox = 'INBOX'
+    mailbox = 'INBOX',
   ): Promise<any> {
     const original = await this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
     return this.smtp.reply(original, body, options);
@@ -303,7 +313,7 @@ export class ProtonMailSkill {
     messageId: string,
     body: string,
     options?: ThreadOptions,
-    mailbox = 'INBOX'
+    mailbox = 'INBOX',
   ): Promise<any> {
     const original = await this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
     return this.smtp.continueThread(original, body, options);
@@ -352,7 +362,7 @@ export class ProtonMailSkill {
    */
   async createMailbox(
     name: string,
-    kind: 'folder' | 'label' = 'folder'
+    kind: 'folder' | 'label' = 'folder',
   ): Promise<{ path: string; created: boolean }> {
     return this.imap.createMailbox(resolveMailboxPath(name, kind));
   }
@@ -369,7 +379,7 @@ export class ProtonMailSkill {
    */
   async deleteMailbox(
     name: string,
-    kind: 'folder' | 'label' = 'folder'
+    kind: 'folder' | 'label' = 'folder',
   ): Promise<{ path: string }> {
     return this.imap.deleteMailbox(resolveMailboxPath(name, kind));
   }
@@ -385,7 +395,11 @@ export class ProtonMailSkill {
    * @param read - True for read, false for unread
    * @param mailbox - Mailbox the message lives in (default: INBOX)
    */
-  async markRead(uid: string, read: boolean, mailbox = 'INBOX'): Promise<{ uid: string; read: boolean }> {
+  async markRead(
+    uid: string,
+    read: boolean,
+    mailbox = 'INBOX',
+  ): Promise<{ uid: string; read: boolean }> {
     return this.imap.markRead(uid, read, await this.resolveMailbox(mailbox));
   }
 
@@ -399,7 +413,10 @@ export class ProtonMailSkill {
    * Proton's star is membership of the `Starred` mailbox. Setting `\Flagged`
    * directly does not star anything; Bridge reverts it.
    */
-  async starEmail(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
+  async starEmail(
+    uid: string,
+    mailbox = 'INBOX',
+  ): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
     return this.imap.star(uid, await this.resolveMailbox(mailbox));
   }
 
@@ -409,7 +426,10 @@ export class ProtonMailSkill {
    * @param uid - Message UID
    * @param mailbox - Mailbox the message lives in (default: INBOX)
    */
-  async unstarEmail(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
+  async unstarEmail(
+    uid: string,
+    mailbox = 'INBOX',
+  ): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
     return this.imap.unstar(uid, await this.resolveMailbox(mailbox));
   }
 
@@ -429,13 +449,13 @@ export class ProtonMailSkill {
   async moveEmail(
     uid: string,
     target: string,
-    mailbox = 'INBOX'
+    mailbox = 'INBOX',
   ): Promise<{ uid: string; from: string; to: string; newUid: string | null }> {
     const boxes = await this.imap.listMailboxes();
     return this.imap.moveMessage(
       uid,
       resolveTargetMailbox(target, boxes),
-      mailbox === 'INBOX' ? 'INBOX' : resolveTargetMailbox(mailbox, boxes)
+      mailbox === 'INBOX' ? 'INBOX' : resolveTargetMailbox(mailbox, boxes),
     );
   }
 
@@ -449,7 +469,7 @@ export class ProtonMailSkill {
   async deleteEmail(
     uid: string,
     permanent = false,
-    mailbox = 'INBOX'
+    mailbox = 'INBOX',
   ): Promise<{ uid: string; deleted: 'trashed' | 'expunged'; to: string | null }> {
     return this.imap.deleteMessage(uid, permanent, await this.resolveMailbox(mailbox));
   }

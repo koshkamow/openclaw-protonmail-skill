@@ -31,9 +31,9 @@
  * `rejectUnauthorized: false`.
  */
 
-import net from 'net';
-import tls from 'tls';
-import type { PeerCertificate } from 'tls';
+import net from 'node:net';
+import type { PeerCertificate } from 'node:tls';
+import tls from 'node:tls';
 
 /**
  * TLS options for a Bridge connection.

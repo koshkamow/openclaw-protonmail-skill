@@ -30,7 +30,11 @@ jobs:
     - name: Typecheck
       run: bun run typecheck
 
-    - name: Lint
+    # `biome check` is the linter, the formatter check and import sorting in one
+    # pass, so unformatted code fails here rather than drifting until someone
+    # notices. --error-on-warnings is in the script: a warning let the `any`s
+    # through under the previous linter.
+    - name: Lint and format (biome)
       run: bun run lint
 
     - name: Test

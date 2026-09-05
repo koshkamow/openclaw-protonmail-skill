@@ -29,14 +29,13 @@ Feature requests are welcome! Open an issue with:
 
 1. **Fork the repo** and create a feature branch
 2. **Make your changes:**
-   - Follow existing code style (TypeScript, ESLint)
+   - Follow existing code style (TypeScript, Biome)
    - Add tests if applicable
    - Update documentation (README, SKILL.md) if needed
 3. **Test your changes:**
    ```bash
-   npm test
-   npm run lint
-   npm run build
+   bun run format   # apply Biome's formatting and safe fixes
+   bun run check    # typecheck, lint and test — what CI runs
    ```
 4. **Commit with clear messages:**
    - Use conventional commits: `feat:`, `fix:`, `docs:`, `refactor:`, etc.
@@ -47,7 +46,7 @@ Feature requests are welcome! Open an issue with:
 ### Code Style
 
 - **TypeScript** for all source files
-- **ESLint** rules enforced (run `npm run lint`)
+- **Biome** formats and lints; warnings fail (run `bun run lint`)
 - **Descriptive variable names** (no single letters except loop indices)
 - **JSDoc comments** for public APIs
 - **Error handling** — always handle errors gracefully

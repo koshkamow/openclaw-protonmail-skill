@@ -6,17 +6,13 @@
  * a parsed message by name.
  */
 
-import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+import { afterAll, beforeAll, describe, expect, it } from 'bun:test';
 
-import fs from 'fs';
-import os from 'os';
-import path from 'path';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 
-import {
-  resolveAttachments,
-  pickAttachment,
-  AttachmentError,
-} from '../src/attachments';
+import { AttachmentError, pickAttachment, resolveAttachments } from '../src/attachments';
 
 let tmpDir: string;
 let filePath: string;
@@ -38,14 +34,14 @@ describe('resolveAttachments()', () => {
 
   it('resolves a relative path to an absolute one', () => {
     const relative = path.relative(process.cwd(), filePath);
-    const [attachment] = resolveAttachments([relative])!;
+    const [attachment] = resolveAttachments([relative]) ?? [];
 
     expect(path.isAbsolute(attachment.path)).toBe(true);
     expect(fs.realpathSync(attachment.path)).toBe(fs.realpathSync(filePath));
   });
 
   it('uses the file base name as the attachment filename', () => {
-    const [attachment] = resolveAttachments([filePath])!;
+    const [attachment] = resolveAttachments([filePath]) ?? [];
     expect(attachment.filename).toBe('report.pdf');
   });
 
@@ -53,7 +49,7 @@ describe('resolveAttachments()', () => {
     const second = path.join(tmpDir, 'data.csv');
     fs.writeFileSync(second, 'a,b,c');
 
-    const resolved = resolveAttachments([filePath, second])!;
+    const resolved = resolveAttachments([filePath, second]) ?? [];
 
     expect(resolved).toHaveLength(2);
     expect(resolved.map((a) => a.filename)).toEqual(['report.pdf', 'data.csv']);
@@ -101,13 +97,11 @@ describe('pickAttachment()', () => {
   it('throws listing what is available when the name does not match', () => {
     expect(() => pickAttachment(list, 'missing.pdf')).toThrow(AttachmentError);
     expect(() => pickAttachment(list, 'missing.pdf')).toThrow(
-      /no attachment named 'missing.pdf'[\s\S]*Available: Invoice.PDF, notes.txt/
+      /no attachment named 'missing.pdf'[\s\S]*Available: Invoice.PDF, notes.txt/,
     );
   });
 
   it('says so plainly when the message has no attachments at all', () => {
-    expect(() => pickAttachment([], 'anything.pdf')).toThrow(
-      /This message has no attachments\./
-    );
+    expect(() => pickAttachment([], 'anything.pdf')).toThrow(/This message has no attachments\./);
   });
 });

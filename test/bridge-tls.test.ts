@@ -8,8 +8,8 @@
  * rejected, not merely that a right one passes.
  */
 
-import { describe, it, expect } from 'bun:test';
-import type { PeerCertificate } from 'tls';
+import { describe, expect, it } from 'bun:test';
+import type { PeerCertificate } from 'node:tls';
 
 import { bridgeTlsOptions } from '../src/bridge-tls';
 
@@ -51,7 +51,7 @@ describe('bridgeTlsOptions()', () => {
     expect(error?.message).toContain('altnames');
   });
 
-  it('rejects Bridge\'s certificate when a different host was configured', () => {
+  it("rejects Bridge's certificate when a different host was configured", () => {
     const { checkServerIdentity } = bridgeTlsOptions('192.0.2.10');
     expect(checkServerIdentity('192.0.2.10', bridgeCert())).toBeInstanceOf(Error);
   });

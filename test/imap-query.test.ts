@@ -8,13 +8,13 @@
  * it is asserted here rather than left to the live checks.
  */
 
-import { describe, it, expect } from 'bun:test';
+import { describe, expect, it } from 'bun:test';
 
 import {
+  formatAddresses,
   parseSearchQuery,
   sanitizeSearchInput,
   sanitizeSearchValue,
-  formatAddresses,
 } from '../src/imap';
 
 describe('parseSearchQuery()', () => {
@@ -86,7 +86,7 @@ describe('parseSearchQuery()', () => {
 
   it('rejects a query that reduces to nothing searchable', () => {
     expect(() => parseSearchQuery('newer_than:999d')).toThrow(
-      'Search query is empty or contains unsupported characters'
+      'Search query is empty or contains unsupported characters',
     );
   });
 });
@@ -101,9 +101,7 @@ describe('sanitizeSearchInput()', () => {
   });
 
   it('rejects CR and LF, which would let a query inject an IMAP command', () => {
-    expect(() => sanitizeSearchInput('alice\r\nA1 LOGOUT')).toThrow(
-      'invalid control characters'
-    );
+    expect(() => sanitizeSearchInput('alice\r\nA1 LOGOUT')).toThrow('invalid control characters');
   });
 
   it('rejects other control characters', () => {
@@ -136,7 +134,7 @@ describe('formatAddresses()', () => {
 
   it('renders a display name before the address', () => {
     expect(formatAddresses([{ name: 'Alice', address: 'alice@example.com' }])).toBe(
-      'Alice <alice@example.com>'
+      'Alice <alice@example.com>',
     );
   });
 
@@ -145,7 +143,7 @@ describe('formatAddresses()', () => {
       formatAddresses([
         { name: 'Alice', address: 'alice@example.com' },
         { address: 'bob@example.com' },
-      ])
+      ]),
     ).toBe('Alice <alice@example.com>, <bob@example.com>');
   });
 
@@ -165,7 +163,7 @@ describe('formatAddresses()', () => {
   it('drops the quotes around a display name that needed them', () => {
     // Raw header: `"Smith, Alice" <alice@example.com>`
     expect(formatAddresses([{ name: 'Smith, Alice', address: 'alice@example.com' }])).toBe(
-      'Smith, Alice <alice@example.com>'
+      'Smith, Alice <alice@example.com>',
     );
   });
 

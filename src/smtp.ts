@@ -1,17 +1,17 @@
 /**
  * SMTP Client for Proton Mail Bridge
- * 
+ *
  * Provides email sending capabilities through Bridge's local SMTP server.
  * Connects to 127.0.0.1:1025 by default.
- * 
+ *
  * @packageDocumentation
  */
 
+import type { PeerCertificate } from 'node:tls';
+import type { SendMailOptions, Transporter } from 'nodemailer';
 import nodemailer from 'nodemailer';
-import type { Transporter, SendMailOptions } from 'nodemailer';
-import type { PeerCertificate } from 'tls';
 
-import { threadingHeaders, replySubject, threadSubject } from './threading';
+import { replySubject, threadingHeaders, threadSubject } from './threading';
 
 /**
  * SMTP connection configuration
@@ -19,22 +19,22 @@ import { threadingHeaders, replySubject, threadSubject } from './threading';
 export interface SMTPConfig {
   /** SMTP host (Bridge runs on localhost) */
   host: string;
-  
+
   /** SMTP port (Bridge default: 1025) */
   port: number;
-  
+
   /** Use TLS from start (false for Bridge) */
   secure: boolean;
-  
+
   /** Bridge authentication credentials */
   auth: {
     /** Bridge account email */
     user: string;
-    
+
     /** Bridge-generated password */
     pass: string;
   };
-  
+
   /** Fail rather than fall back to plaintext when STARTTLS is unavailable */
   requireTLS?: boolean;
 
@@ -57,21 +57,21 @@ export interface SMTPConfig {
 export interface SendOptions {
   /** CC recipients (comma-separated or array) */
   cc?: string | string[];
-  
+
   /** BCC recipients (comma-separated or array) */
   bcc?: string | string[];
-  
+
   /** HTML version of the email body */
   html?: string;
-  
+
   /** File attachments */
   attachments?: Array<{
     /** Attachment filename */
     filename: string;
-    
+
     /** File path or Buffer */
     content?: Buffer | string;
-    
+
     /** File path */
     path?: string;
   }>;
@@ -121,12 +121,11 @@ export interface ThreadOptions {
  */
 function originalSender(originalMessage: any, verb: string): string {
   const address =
-    originalMessage?.replyTo?.value?.[0]?.address ||
-    originalMessage?.from?.value?.[0]?.address;
+    originalMessage?.replyTo?.value?.[0]?.address || originalMessage?.from?.value?.[0]?.address;
 
   if (!address) {
     throw new Error(
-      `${verb}: could not determine recipient — original message has no From or Reply-To address`
+      `${verb}: could not determine recipient — original message has no From or Reply-To address`,
     );
   }
 
@@ -135,7 +134,7 @@ function originalSender(originalMessage: any, verb: string): string {
 
 /**
  * SMTP client for sending emails via Proton Mail Bridge
- * 
+ *
  * @remarks
  * Uses nodemailer for SMTP operations. Bridge handles encryption
  * and routing to Proton servers.
@@ -146,7 +145,7 @@ export class SMTPClient {
 
   /**
    * Create a new SMTP client
-   * 
+   *
    * @param config - SMTP connection settings
    */
   constructor(config: SMTPConfig) {
@@ -156,15 +155,15 @@ export class SMTPClient {
 
   /**
    * Send a new email
-   * 
+   *
    * @param to - Recipient email address
    * @param subject - Email subject
    * @param body - Plain text email body
    * @param options - Additional options (CC, BCC, HTML, attachments)
    * @returns Send result with messageId
-   * 
+   *
    * @throws {Error} If sending fails (invalid recipient, Bridge offline, etc.)
-   * 
+   *
    * @example
    * ```typescript
    * const result = await smtp.send(
@@ -179,12 +178,7 @@ export class SMTPClient {
    * console.log('Sent:', result.messageId);
    * ```
    */
-  async send(
-    to: string,
-    subject: string,
-    body: string,
-    options?: SendOptions
-  ): Promise<any> {
+  async send(to: string, subject: string, body: string, options?: SendOptions): Promise<any> {
     const mailOptions: SendMailOptions = {
       from: this.config.auth.user,
       to,
@@ -193,25 +187,27 @@ export class SMTPClient {
       html: options?.html,
       cc: options?.cc,
       bcc: options?.bcc,
-      attachments: options?.attachments
+      attachments: options?.attachments,
     };
 
     try {
       const result = await this.transporter.sendMail(mailOptions);
       return result;
     } catch (error) {
-      throw new Error(`Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`);
+      throw new Error(
+        `Failed to send email: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      );
     }
   }
 
   /**
    * Reply to an existing email thread
-   * 
+   *
    * @param originalMessage - Original email (from IMAP readMessage)
    * @param body - Reply text
    * @param options - Additional options (attachments)
    * @returns Send result
-   * 
+   *
    * @throws {Error} If reply fails
    *
    * @remarks
@@ -267,11 +263,7 @@ export class SMTPClient {
    * await smtp.continueThread(original, 'Adding Bob.', { to: 'bob@example.com' });
    * ```
    */
-  async continueThread(
-    originalMessage: any,
-    body: string,
-    options?: ThreadOptions
-  ): Promise<any> {
+  async continueThread(originalMessage: any, body: string, options?: ThreadOptions): Promise<any> {
     const to = options?.to ?? originalSender(originalMessage, 'thread');
     const { inReplyTo, references } = threadingHeaders(originalMessage);
 

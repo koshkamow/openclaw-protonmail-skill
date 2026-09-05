@@ -1,6 +1,6 @@
 /**
  * OpenClaw Tool Definitions for ProtonMail Skill
- * 
+ *
  * Registers tool functions that OpenClaw can invoke.
  */
 
@@ -9,7 +9,6 @@ import type { ProtonMailSkill } from './index';
 export function registerTools(_skill: ProtonMailSkill) {
   // TODO: Register tools with OpenClaw's tool registry
   // This will depend on OpenClaw's skill API
-  
   // Example tool structure (adjust to match OpenClaw's actual API):
   /*
   registerTool({
@@ -32,21 +31,21 @@ export const TOOL_DEFINITIONS = {
     description: 'List recent emails from inbox',
     parameters: {
       limit: { type: 'number', optional: true, default: 10 },
-      unreadOnly: { type: 'boolean', optional: true, default: false }
-    }
+      unreadOnly: { type: 'boolean', optional: true, default: false },
+    },
   },
   'protonmail-search': {
     description: 'Search emails by query',
     parameters: {
       query: { type: 'string', required: true },
-      limit: { type: 'number', optional: true, default: 10 }
-    }
+      limit: { type: 'number', optional: true, default: 10 },
+    },
   },
   'protonmail-read': {
     description: 'Read a specific email by ID',
     parameters: {
-      messageId: { type: 'string', required: true }
-    }
+      messageId: { type: 'string', required: true },
+    },
   },
   'protonmail-send': {
     description: 'Send a new email',
@@ -55,14 +54,14 @@ export const TOOL_DEFINITIONS = {
       subject: { type: 'string', required: true },
       body: { type: 'string', required: true },
       cc: { type: 'string', optional: true },
-      bcc: { type: 'string', optional: true }
-    }
+      bcc: { type: 'string', optional: true },
+    },
   },
   'protonmail-reply': {
     description: 'Reply to an email thread',
     parameters: {
       messageId: { type: 'string', required: true },
-      body: { type: 'string', required: true }
-    }
-  }
+      body: { type: 'string', required: true },
+    },
+  },
 };
