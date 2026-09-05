@@ -36,6 +36,7 @@ export {
   resolveTargetMailbox,
   classifyMailbox,
   assertDeletable,
+  assertRelocatableSource,
   isSystemMailbox,
   MailboxError,
   FOLDERS_ROOT,

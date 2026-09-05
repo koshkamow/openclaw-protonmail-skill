@@ -135,6 +135,13 @@ All of these take `--mailbox=<path>` to act on a message outside INBOX. UIDs
 are per-mailbox, so a message that moves gets a new UID in its destination —
 `move` reports it as `newUid`.
 
+`move` and `delete` refuse a **label** as the source mailbox. A message is
+stored in one folder and carries many labels, so a label mailbox lists
+messages that live elsewhere. Moving out of one was measured to drop the label
+*and* relocate the message, which is not what either command promises — so
+they ask you to name the folder the message lives in instead. Moving *into* a
+label is fine; it is only the source that is restricted.
+
 **How a Proton star works.** Measured against Bridge 03.25.00: the star is
 membership of the `Starred` mailbox, not a flag you can set. A starred message
 does read as `\Flagged` in its home mailbox, but that is a projection of the

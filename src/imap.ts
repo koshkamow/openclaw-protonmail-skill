@@ -14,6 +14,7 @@ import { simpleParser, ParsedMail } from 'mailparser';
 import { bridgeTlsOptions } from './bridge-tls';
 import {
   assertDeletable,
+  assertRelocatableSource,
   classifyMailbox,
   MailboxError,
   STARRED_MAILBOX,
@@ -536,8 +537,10 @@ export class IMAPClient {
    *
    * @param uid - Message UID
    * @param target - Full path of the destination
-   * @param mailbox - Mailbox the message lives in
+   * @param mailbox - Folder the message lives in
    * @returns The UID, where it went, and its new UID there when the server says
+   *
+   * @throws {MailboxError} If `mailbox` is a label rather than a folder
    *
    * @remarks
    * Bridge advertises MOVE, so this is one atomic operation rather than a
@@ -548,6 +551,10 @@ export class IMAPClient {
     target: string,
     mailbox = 'INBOX'
   ): Promise<{ uid: string; from: string; to: string; newUid: string | null }> {
+    // A label is a projection, not a storage location; see
+    // assertRelocatableSource for what MOVE against one was measured to do.
+    assertRelocatableSource(mailbox);
+
     return this.withMailbox(mailbox, false, async (client) => {
       await this.assertMessageExists(client, uid, mailbox);
 
@@ -572,8 +579,10 @@ export class IMAPClient {
    *
    * @param uid - Message UID
    * @param permanent - Expunge instead of moving to Trash
-   * @param mailbox - Mailbox the message lives in
+   * @param mailbox - Folder the message lives in
    * @returns What was done and where the message went
+   *
+   * @throws {MailboxError} If `mailbox` is a label rather than a folder
    *
    * @remarks
    * The default moves to Trash, which is recoverable. Expunging is not, so it
@@ -585,6 +594,8 @@ export class IMAPClient {
     permanent = false,
     mailbox = 'INBOX'
   ): Promise<{ uid: string; deleted: 'trashed' | 'expunged'; to: string | null }> {
+    assertRelocatableSource(mailbox);
+
     const expunge = permanent || mailbox === TRASH_MAILBOX;
 
     if (expunge) {

@@ -264,6 +264,51 @@ export function resolveTargetMailbox(name: string, existing: MailboxInfo[]): str
 }
 
 /**
+ * Check that a mailbox can be the source of a relocating write.
+ *
+ * @param path - Full IMAP path the write would act on
+ *
+ * @throws {MailboxError} If the path is a label rather than a folder
+ *
+ * @remarks
+ * A message is *stored* in one folder and *carries* labels. A label mailbox
+ * is therefore a projection of messages living elsewhere, and MOVE against it
+ * does not mean what `move` and `delete` promise.
+ *
+ * Measured against Bridge 03.25.00: moving a message out of a label mailbox
+ * to Trash drops the label **and** relocates the physical message, while the
+ * immediate read-back still shows it in INBOX. So `delete <uid>
+ * --mailbox=Labels/Urgent` reports `trashed` for an operation that also
+ * silently removed a label the caller never mentioned, and
+ * `move <uid> Archive --mailbox=Labels/Urgent` would move the message out of
+ * its folder when the caller meant to take it out of a label.
+ *
+ * Rather than ship that, these two verbs refuse a label source. Acting on the
+ * folder the message lives in is unambiguous and does what it says. Removing
+ * a label is a real and sound operation — it is how `unstar` works — but it is
+ * a different verb, and it does not exist yet.
+ */
+export function assertRelocatableSource(path: string): void {
+  const trimmed = (path || '').trim();
+
+  if (trimmed === STARRED_MAILBOX) {
+    throw new MailboxError(
+      `'${STARRED_MAILBOX}' holds starred messages rather than storing them; ` +
+        `use unstar to remove a star, or act on the mailbox the message lives in`
+    );
+  }
+
+  if (trimmed === LABELS_ROOT || trimmed.startsWith(`${LABELS_ROOT}/`)) {
+    throw new MailboxError(
+      `'${trimmed}' is a label, not a folder. A message is stored in a folder ` +
+        `and carries labels, so moving or deleting it out of a label would ` +
+        `relocate the message itself and drop the label as a side effect. ` +
+        `Act on the folder the message lives in instead.`
+    );
+  }
+}
+
+/**
  * Check that a mailbox may be deleted.
  *
  * @param path - Full IMAP path

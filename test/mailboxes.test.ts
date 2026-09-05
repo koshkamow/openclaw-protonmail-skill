@@ -13,6 +13,7 @@ import {
   resolveMailboxPath,
   resolveTargetMailbox,
   assertDeletable,
+  assertRelocatableSource,
   MailboxError,
   FOLDERS_ROOT,
   LABELS_ROOT,
@@ -168,6 +169,36 @@ describe('resolveTargetMailbox()', () => {
 
   it('requires a target', () => {
     expect(() => resolveTargetMailbox('', boxes)).toThrow('target mailbox is required');
+  });
+});
+
+describe('assertRelocatableSource()', () => {
+  it('allows a folder or a system mailbox', () => {
+    expect(() => assertRelocatableSource('INBOX')).not.toThrow();
+    expect(() => assertRelocatableSource('Archive')).not.toThrow();
+    expect(() => assertRelocatableSource('Trash')).not.toThrow();
+    expect(() => assertRelocatableSource('Folders/Receipts')).not.toThrow();
+  });
+
+  it('refuses a label, whose UID space is a projection not a location', () => {
+    // Measured: MOVE out of a label drops the label and relocates the message,
+    // while the immediate read-back still shows it where it was. `delete`
+    // would report "trashed" for that.
+    expect(() => assertRelocatableSource('Labels/Urgent')).toThrow(MailboxError);
+    expect(() => assertRelocatableSource('Labels/Urgent')).toThrow('is a label, not a folder');
+  });
+
+  it('refuses the Labels tree root', () => {
+    expect(() => assertRelocatableSource('Labels')).toThrow('is a label, not a folder');
+  });
+
+  it('refuses Starred, and points at unstar', () => {
+    expect(() => assertRelocatableSource('Starred')).toThrow('use unstar');
+  });
+
+  it('does not refuse a folder whose name merely contains Labels', () => {
+    expect(() => assertRelocatableSource('Folders/Labels')).not.toThrow();
+    expect(() => assertRelocatableSource('Folders/LabelsArchive')).not.toThrow();
   });
 });
 
