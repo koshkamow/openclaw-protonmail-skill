@@ -1,6 +1,6 @@
 ---
 name: protonmail
-description: ProtonMail integration via Proton Mail Bridge for reading and sending encrypted emails.
+description: ProtonMail via Proton Mail Bridge — read, search, send, reply, continue a thread, manage folders and labels, and mark, star, move or delete messages.
 homepage: https://github.com/rvacyber/openclaw-protonmail-skill
 metadata: {"openclaw":{"emoji":"🔐","requires":{"env":["PROTONMAIL_ACCOUNT","PROTONMAIL_BRIDGE_PASSWORD"]},"install":[{"id":"brew-bridge","kind":"brew","formula":"proton-mail-bridge","bins":[],"label":"Install Proton Mail Bridge (macOS)","cask":true}]}}
 ---
@@ -48,154 +48,51 @@ Use ProtonMail for secure email via Proton Mail Bridge. Runs on Bun. CLI tested 
 
 ## CLI Usage
 
-The skill provides a `protonmail` CLI tool:
+The skill provides a `protonmail` CLI tool. Every message command takes
+`--mailbox=<path>` and acts on INBOX without it.
 
 ```bash
-# List inbox (most recent 10 emails)
-protonmail list-inbox --limit=10 [--unread]
-
-# Search emails
-protonmail search "from:alice@example.com" --limit=20
-
-# Read specific email
-protonmail read <uid>
+# Reading
+protonmail list-inbox [--limit=10] [--unread] [--mailbox=<path>]
+protonmail search <query> [--limit=10] [--mailbox=<path>]
+protonmail read <uid> [--mailbox=<path>]
 
 # Write one attachment's bytes to stdout — redirect them to a file
 protonmail read <uid> --attachment=report.pdf > report.pdf
 
-# Send email
-protonmail send --to=bob@example.com --subject="Meeting" --body="See you at 3pm"
+# Sending — repeat --attach for multiple files
+protonmail send --to=bob@example.com --subject="Meeting" --body="See you at 3pm" \
+  [--cc=] [--bcc=] [--attach=/path/report.pdf ...]
+protonmail reply <uid> --body="Sounds good!" [--attach=] [--mailbox=<path>]
+protonmail thread <uid> --body="One more thing." [--to=] [--cc=] [--bcc=] [--attach=]
 
-# Send email with attachment(s) — repeat --attach for multiple files
-protonmail send --to=bob@example.com --subject="Report" --body="Attached." --attach=/path/report.pdf --attach=/path/data.csv
+# Folders and labels — a folder by default, --label selects the other tree
+protonmail list-folders [--kind=folder|label|system|container|all]
+protonmail create-folder <name> [--label]
+protonmail delete-folder <name> [--label]
 
-# Reply to email (optionally with attachments)
-protonmail reply <uid> --body="Sounds good!" [--attach=/path/file.pdf]
-```
-
-Every `--attach` path is checked before anything is sent, so a mistyped path
-fails on its own message rather than producing a half-formed email.
-`--attachment` matches the filename exactly first, then case-insensitively,
-and lists what the message does carry when nothing matches.
-
-### Working outside INBOX
-
-`list-inbox`, `search`, `read`, `reply` and `thread` all take `--mailbox`, as
-do the message-state commands. Without it they act on INBOX.
-
-```bash
-protonmail search "from:alice@example.com" --mailbox=Archive
-protonmail list-inbox --limit=5 --mailbox=Sent
-protonmail read <uid> --mailbox=Sent
-protonmail search "invoice" --mailbox=Receipts     # a bare folder name works
-protonmail search "urgent" --mailbox=Labels/Urgent # so does a full path
-```
-
-The name is resolved against the mailboxes that exist, so a bare `Receipts`
-finds `Folders/Receipts`, an unknown name lists what is available, and a name
-that is both a folder and a label asks for the full path rather than picking
-one. **UIDs are per-mailbox**: uid 77 in `Sent` is a different message from
-uid 77 in `INBOX`.
-
-### Folders and labels
-
-Proton keeps **folders and labels in separate trees**, under `\Noselect`
-parents named `Folders` and `Labels`. A message lives in exactly one folder and
-can carry many labels, so every command says which it means: the default is a
-folder, and `--label` selects the other tree.
-
-```bash
-# Every mailbox, classified as system / folder / label / container
-protonmail list-folders
-
-# Just one kind
-protonmail list-folders --kind=folder
-protonmail list-folders --kind=label
-
-# Create — "Receipts" becomes Folders/Receipts, or Labels/Receipts with --label
-protonmail create-folder Receipts
-protonmail create-folder Urgent --label
-
-# Nesting works; intermediate levels are created for you
-protonmail create-folder "2026/Q1"
-
-# Delete
-protonmail delete-folder Receipts
-protonmail delete-folder Urgent --label
-```
-
-A full path from `list-folders` is accepted as given (`Folders/Receipts`), and
-is refused when it names the other tree — `delete-folder Labels/Urgent` is an
-error rather than a silent guess. Proton's own mailboxes (`INBOX`, `Sent`,
-`Drafts`, `Archive`, `Spam`, `Trash`, `All Mail`, `Starred`) and the two tree
-roots cannot be created or deleted.
-
-### Continuing a conversation
-
-`reply` answers the sender under a `Re: ` subject. `thread` sends a **new**
-message into an existing conversation, and differs in the two ways that decide
-where it lands:
-
-```bash
-# Continue the conversation that <uid> belongs to
-protonmail thread <uid> --body="One more thing."
-
-# Bring someone else into it without starting a new thread
-protonmail thread <uid> --body="Adding Bob." --to=bob@example.com
-
-# Attachments and cc/bcc work here too
-protonmail thread <uid> --body="Numbers attached." --attach=/path/q3.pdf --cc=carol@example.com
-```
-
-The subject is carried **byte for byte** — no `Re: ` added, no whitespace
-tidied. `In-Reply-To` and `References` are taken from the message named,
-extending the chain rather than restating it.
-
-Both matter, and for different reasons. The headers are what any
-standards-respecting client threads on; the unchanged subject is what Proton's
-own UI needs, because it groups a conversation by subject *plus participants*.
-A subject that drifts splits the thread in Proton even when the headers are
-right.
-
-### Message state
-
-```bash
+# Message state
 protonmail mark-read <uid>
 protonmail mark-unread <uid>
 protonmail star <uid>
 protonmail unstar <uid>
-
-# Move: a system mailbox, or a bare folder/label name, or a full path
-protonmail move <uid> Archive
-protonmail move <uid> Receipts
-protonmail move <uid> Labels/Urgent
-
-# Delete moves to Trash, which is recoverable
-protonmail delete <uid>
-
-# Irrecoverable, so it has to be asked for
-protonmail delete <uid> --permanent
+protonmail move <uid> <mailbox>
+protonmail delete <uid> [--permanent]   # without --permanent, moves to Trash
 ```
 
-All of these take `--mailbox=<path>` to act on a message outside INBOX. UIDs
-are per-mailbox, so a message that moves gets a new UID in its destination —
-`move` reports it as `newUid`.
+`search` takes `from:`, `subject:`, `body:` and `newer_than:7d` filters, which
+AND together; anything else is treated as a subject keyword.
 
-`move` and `delete` refuse a **label** as the source mailbox. A message is
-stored in one folder and carries many labels, so a label mailbox lists
-messages that live elsewhere. Moving out of one was measured to drop the label
-*and* relocate the message, which is not what either command promises — so
-they ask you to name the folder the message lives in instead. Moving *into* a
-label is fine; it is only the source that is restricted.
+```bash
+protonmail search "from:alice@example.com newer_than:7d" --limit=20
+protonmail search "invoice" --mailbox=Receipts     # a bare folder name works
+protonmail search "urgent" --mailbox=Labels/Urgent # so does a full path
+```
 
-**How a Proton star works.** Measured against Bridge 03.25.00: the star is
-membership of the `Starred` mailbox, not a flag you can set. A starred message
-does read as `\Flagged` in its home mailbox, but that is a projection of the
-label rather than the state — setting `\Flagged` directly stars nothing, and
-Bridge reverts the flag within about fifteen seconds. So `star` copies the
-message into `Starred` and `unstar` removes it from there, matching it by
-Message-ID because `Starred` has its own UID space. Both are idempotent and
-report whether the message was already in that state.
+Proton keeps folders and labels in separate trees, UIDs are per-mailbox, and a
+star is mailbox membership rather than a flag — see
+[docs/mailboxes-threading-and-state.md](docs/mailboxes-threading-and-state.md)
+for the behaviour behind those commands.
 
 ## Common Requests
 

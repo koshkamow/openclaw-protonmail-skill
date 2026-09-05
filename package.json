@@ -29,6 +29,7 @@
   "files": [
     "src",
     "bin",
+    "docs",
     "SKILL.md",
     "README.md"
   ],
@@ -38,7 +39,7 @@
     "lint": "biome check --error-on-warnings",
     "format": "biome check --write",
     "check": "bun run typecheck && bun run lint && bun test",
-    "install-skill": "bun run check && mkdir -p ~/.openclaw/skills/protonmail && cp -r src bin package.json bun.lock SKILL.md README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md CODE_OF_CONDUCT.md LICENSE examples tsconfig.json ~/.openclaw/skills/protonmail/ && chmod +x ~/.openclaw/skills/protonmail/bin/protonmail && echo 'Skill installed to ~/.openclaw/skills/protonmail'"
+    "install-skill": "bun run check && mkdir -p ~/.openclaw/skills/protonmail && cp -r src bin docs package.json bun.lock SKILL.md README.md CONTRIBUTING.md SECURITY.md CHANGELOG.md CODE_OF_CONDUCT.md LICENSE examples tsconfig.json ~/.openclaw/skills/protonmail/ && chmod +x ~/.openclaw/skills/protonmail/bin/protonmail && echo 'Skill installed to ~/.openclaw/skills/protonmail'"
   },
   "dependencies": {
     "imapflow": "^1.7.8",
