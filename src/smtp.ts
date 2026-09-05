@@ -9,6 +9,7 @@
 
 import nodemailer from 'nodemailer';
 import type { Transporter, SendMailOptions } from 'nodemailer';
+import type { PeerCertificate } from 'tls';
 
 /**
  * SMTP connection configuration
@@ -32,8 +33,20 @@ export interface SMTPConfig {
     pass: string;
   };
   
-  /** TLS options (set rejectUnauthorized: false for Bridge) */
-  tls?: { rejectUnauthorized: boolean };
+  /** Fail rather than fall back to plaintext when STARTTLS is unavailable */
+  requireTLS?: boolean;
+
+  /**
+   * TLS options for the STARTTLS upgrade.
+   *
+   * @remarks
+   * Build these with `bridgeTlsOptions()` — Bridge's certificate names only
+   * the IP `127.0.0.1`, and Bun needs the host named explicitly.
+   */
+  tls?: {
+    rejectUnauthorized?: boolean;
+    checkServerIdentity?: (servername: string, cert: PeerCertificate) => Error | undefined;
+  };
 }
 
 /**

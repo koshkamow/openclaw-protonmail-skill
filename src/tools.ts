@@ -6,7 +6,7 @@
 
 import type { ProtonMailSkill } from './index';
 
-export function registerTools(skill: ProtonMailSkill) {
+export function registerTools(_skill: ProtonMailSkill) {
   // TODO: Register tools with OpenClaw's tool registry
   // This will depend on OpenClaw's skill API
   

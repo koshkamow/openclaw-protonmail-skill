@@ -1,6 +1,9 @@
-#!/usr/bin/env node
+#!/usr/bin/env bun
 /**
  * ProtonMail CLI for OpenClaw
+ *
+ * Runs the TypeScript sources directly — Bun needs no build step, so there is
+ * no compiled copy to fall out of date with src/.
  *
  * Usage:
  *   protonmail list-inbox [--limit=10] [--unread]
@@ -10,7 +13,7 @@
  *   protonmail reply <message-id> --body=<body> [--attach=<path> ...]
  */
 
-const { ProtonMailSkill, resolveAttachments, pickAttachment } = require('../dist/index.js');
+const { ProtonMailSkill, resolveAttachments, pickAttachment } = require('../src/index.ts');
 
 async function main() {
   const args = process.argv.slice(2);

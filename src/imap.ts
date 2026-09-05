@@ -144,7 +144,7 @@ export class IMAPClient {
    */
   async listInbox(limit = 10, unreadOnly = false): Promise<EmailMetadata[]> {
     return new Promise((resolve, reject) => {
-      this.imap.openBox('INBOX', true, (err, box) => {
+      this.imap.openBox('INBOX', true, (err, _box) => {
         if (err) {
           reject(err);
           return;
@@ -172,7 +172,7 @@ export class IMAPClient {
             struct: true
           });
 
-          fetch.on('message', (msg, seqno) => {
+          fetch.on('message', (msg, _seqno) => {
             let buffer = '';
             let uid = '';
             let flags: string[] = [];
@@ -226,7 +226,7 @@ export class IMAPClient {
    */
   async search(query: string, limit = 10): Promise<EmailMetadata[]> {
     return new Promise((resolve, reject) => {
-      this.imap.openBox('INBOX', true, (err, box) => {
+      this.imap.openBox('INBOX', true, (err, _box) => {
         if (err) {
           reject(err);
           return;
@@ -254,7 +254,7 @@ export class IMAPClient {
             struct: true
           });
 
-          fetch.on('message', (msg, seqno) => {
+          fetch.on('message', (msg, _seqno) => {
             let buffer = '';
             let uid = '';
             let flags: string[] = [];
@@ -333,7 +333,7 @@ export class IMAPClient {
 
     // If no supported filters, do safe keyword subject search
     if (criteria.length === 0) {
-      const fallback = this.sanitizeSearchValue(q.replace(/(from|subject|body|newer_than):[^\s]+/gi, '').trim());
+      const fallback = this.sanitizeSearchValue(q.replace(/(from|subject|body|newer_than):[^\s]+/gi, '').trim());
       if (!fallback) {
         throw new Error('Search query is empty or contains unsupported characters');
       }
@@ -351,7 +351,9 @@ export class IMAPClient {
     if (trimmed.length > 200) {
       throw new Error('Search query too long (max 200 chars)');
     }
-    // Block CR/LF and control chars
+    // Block CR/LF and control chars. The class is the point of this guard,
+    // so the rule that objects to control characters is off for this line.
+    // eslint-disable-next-line no-control-regex
     if (/[\r\n\x00-\x1F\x7F]/.test(trimmed)) {
       throw new Error('Search query contains invalid control characters');
     }
@@ -386,7 +388,7 @@ export class IMAPClient {
    */
   async readMessage(messageId: string): Promise<ParsedMail> {
     return new Promise((resolve, reject) => {
-      this.imap.openBox('INBOX', true, (err, box) => {
+      this.imap.openBox('INBOX', true, (err, _box) => {
         if (err) {
           reject(err);
           return;

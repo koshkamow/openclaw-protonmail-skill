@@ -25,7 +25,10 @@
 import { IMAPClient } from './imap';
 import { SMTPClient } from './smtp';
 import type { ReplyOptions } from './smtp';
+import { bridgeTlsOptions } from './bridge-tls';
 import { registerTools } from './tools';
+
+export { bridgeTlsOptions } from './bridge-tls';
 
 export type { ReplyOptions, SendOptions } from './smtp';
 export {
@@ -124,10 +127,15 @@ export class ProtonMailSkill {
       autotls: 'never'
     };
 
+    // secure: false plus requireTLS means "connect in the clear, then insist on
+    // STARTTLS" — which is how Bridge's SMTP port works. The connection fails
+    // rather than falling back to plaintext if the upgrade is unavailable.
     const smtpConfig = {
       host: fullConfig.smtpHost,
       port: fullConfig.smtpPort,
       secure: false,
+      requireTLS: true,
+      tls: bridgeTlsOptions(fullConfig.smtpHost),
       auth: {
         user: fullConfig.account,
         pass: fullConfig.bridgePassword

@@ -9,7 +9,7 @@ metadata: {"openclaw":{"emoji":"🔐","requires":{"env":["PROTONMAIL_ACCOUNT","P
 
 # ProtonMail Skill (v1.0.1)
 
-Use ProtonMail for secure email via Proton Mail Bridge. Stable release — CLI tested against live Proton Mail Bridge.
+Use ProtonMail for secure email via Proton Mail Bridge. Runs on Bun. CLI tested against live Proton Mail Bridge.
 
 ## Setup (once)
 
@@ -113,7 +113,7 @@ and lists what the message does carry when nothing matches.
 - **Check account email:** Must match exactly (e.g., `user@pm.me` or `user@protonmail.com`)
 
 ### "Skill not found"
-- **Reinstall skill:** Run `npm run install-skill` in the skill directory
+- **Reinstall skill:** Run `bun run install-skill` in the skill directory
 - **Check OpenClaw config:** Ensure `skills.protonmail.enabled: true`
 
 ## Development

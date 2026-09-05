@@ -5,6 +5,8 @@
  * Full integration tests will be added as the skill develops.
  */
 
+import { describe, it, expect, beforeAll, afterAll } from 'bun:test';
+
 import ProtonMailSkill from '../src/index';
 
 describe('ProtonMailSkill', () => {

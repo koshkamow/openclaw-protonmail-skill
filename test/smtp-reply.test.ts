@@ -10,18 +10,25 @@
  * not as EmailAddress[]. The correct path is `from?.value?.[0]?.address`.
  */
 
-import { SMTPClient } from '../src/smtp';
+import { describe, it, expect, beforeEach, mock } from 'bun:test';
+import type { SendMailOptions } from 'nodemailer';
 
 // ---------------------------------------------------------------------------
-// Minimal nodemailer transporter mock — captures sendMail calls
+// Minimal nodemailer transporter mock — captures sendMail calls.
+//
+// mock.module() must run before the module under test is loaded, and static
+// imports are hoisted above it — hence the dynamic import below.
 // ---------------------------------------------------------------------------
-const mockSendMail = jest.fn().mockResolvedValue({ messageId: '<sent@test>' });
-
-jest.mock('nodemailer', () => ({
-  createTransport: jest.fn(() => ({
-    sendMail: mockSendMail,
-  })),
+// The parameter is declared so the recorded calls are typed: without it the
+// mock's call tuple is empty and mock.calls[0][0] does not typecheck.
+const mockSendMail = mock(async (_options: SendMailOptions) => ({
+  messageId: '<sent@test>',
 }));
+
+const transport = { createTransport: mock(() => ({ sendMail: mockSendMail })) };
+mock.module('nodemailer', () => ({ default: transport, ...transport }));
+
+const { SMTPClient } = await import('../src/smtp');
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -53,6 +60,7 @@ function parsedMail(overrides: Record<string, any> = {}) {
 describe('SMTPClient.reply()', () => {
   beforeEach(() => {
     mockSendMail.mockClear();
+    transport.createTransport.mockClear();
   });
 
   it('extracts recipient from from.value[0].address (mailparser shape)', async () => {
