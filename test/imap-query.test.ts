@@ -153,4 +153,33 @@ describe('formatAddresses()', () => {
     expect(formatAddresses(undefined)).toBe('');
     expect(formatAddresses([])).toBe('');
   });
+
+  // The three ways this normalises rather than reproduces the raw header.
+  // Asserted so the difference is recorded rather than assumed away — the
+  // doc comment used to claim the output matched the old header passthrough.
+  it('normalises a bare address into angle brackets', () => {
+    // Raw header `From: alice@example.com` used to come through verbatim.
+    expect(formatAddresses([{ address: 'alice@example.com' }])).toBe('<alice@example.com>');
+  });
+
+  it('drops the quotes around a display name that needed them', () => {
+    // Raw header: `"Smith, Alice" <alice@example.com>`
+    expect(formatAddresses([{ name: 'Smith, Alice', address: 'alice@example.com' }])).toBe(
+      'Smith, Alice <alice@example.com>'
+    );
+  });
+
+  it('lists every address where the old code showed only the first', () => {
+    const rendered = formatAddresses([
+      { address: 'alice@example.com' },
+      { address: 'bob@example.com' },
+      { address: 'carol@example.com' },
+    ]);
+
+    expect(rendered).toBe('<alice@example.com>, <bob@example.com>, <carol@example.com>');
+  });
+
+  it('renders an address with no address part without throwing', () => {
+    expect(formatAddresses([{ name: 'Nameless' }])).toBe('Nameless <>');
+  });
 });

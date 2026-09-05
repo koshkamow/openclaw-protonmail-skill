@@ -66,12 +66,28 @@ interface EnvelopeAddress {
 }
 
 /**
- * Render envelope addresses the way the raw header reads.
+ * Render envelope addresses in RFC 5322 form.
+ *
+ * @param list - Addresses from the message envelope
+ * @returns `Alice <alice@example.com>` with a display name,
+ *   `<alice@example.com>` without, several joined by `, `
  *
  * @remarks
- * `Alice <alice@example.com>` when a display name is set, `<alice@example.com>`
- * when it is not — the shape the previous header-parsing implementation
- * produced. Unlike that one, an RFC 2047 encoded name arrives here decoded.
+ * This is a **normalisation, not a reproduction** of the From header. The
+ * previous implementation passed through whatever bytes followed `From:`, and
+ * an envelope cannot reconstruct those, so the output is regular instead.
+ * Against the raw header it differs in four ways:
+ *
+ * - A bare `From: alice@example.com` gains angle brackets.
+ * - A quoted display name loses its quotes: `"Smith, Alice" <a@x>` becomes
+ *   `Smith, Alice <a@x>`.
+ * - Every address is listed; the old code showed only the first.
+ * - An RFC 2047 encoded name arrives decoded rather than as `=?utf-8?B?...?=`.
+ *
+ * Each is a regularisation of the same information, and this is a display
+ * column rather than something parsed downstream — but it is not byte-identical
+ * to what the header carried, and only the last of the four was called out
+ * when the client was swapped.
  */
 export function formatAddresses(list?: EnvelopeAddress[]): string {
   if (!list || list.length === 0) return '';
