@@ -120,9 +120,11 @@ export function parseSearchQuery(query: string): SearchObject {
 
   // Parse supported key:value filters with quoted or unquoted values
   const filterRegex = /(from|subject|body):(?:"([^"]{1,200})"|([^\s]{1,200}))/gi;
-  // matchAll rather than a while-exec loop: exec carries its position in the
-  // regex's own lastIndex, so a `continue` past the re-assignment would spin
-  // forever on the same match.
+  // matchAll rather than `while ((match = filterRegex.exec(q)) !== null)`.
+  // Same matches, in the same order; what goes is the assignment inside the
+  // loop condition, and the dependence on filterRegex's own mutable
+  // lastIndex — matchAll clones the regex, so this function leaves no state
+  // on a value declared above it.
   for (const match of q.matchAll(filterRegex)) {
     const key = match[1].toLowerCase();
     const rawValue = (match[2] || match[3] || '').trim();
