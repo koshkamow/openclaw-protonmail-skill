@@ -6,9 +6,9 @@
  * no compiled copy to fall out of date with src/.
  *
  * Usage:
- *   protonmail list-inbox [--limit=10] [--unread]
- *   protonmail search <query> [--limit=10]
- *   protonmail read <message-id> [--attachment=<filename>]
+ *   protonmail list-inbox [--limit=10] [--unread] [--mailbox=<path>]
+ *   protonmail search <query> [--limit=10] [--mailbox=<path>]
+ *   protonmail read <message-id> [--attachment=<filename>] [--mailbox=<path>]
  *   protonmail send --to=<email> --subject=<subject> --body=<body> [--cc=<email>] [--bcc=<email>] [--attach=<path> ...]
  *   protonmail reply <message-id> --body=<body> [--attach=<path> ...]
  *   protonmail list-folders [--kind=folder|label|system|all]
@@ -27,11 +27,11 @@ const { ProtonMailSkill, resolveAttachments, pickAttachment } = require('../src/
 
 const COMMANDS = [
   'Commands:',
-  '  list-inbox [--limit=N] [--unread]',
-  '  search <query> [--limit=N]',
-  '  read <uid> [--attachment=<filename>]',
+  '  list-inbox [--limit=N] [--unread] [--mailbox=<path>]',
+  '  search <query> [--limit=N] [--mailbox=<path>]',
+  '  read <uid> [--attachment=<filename>] [--mailbox=<path>]',
   '  send --to= --subject= --body= [--cc=] [--bcc=] [--attach=<path> ...]',
-  '  reply <uid> --body= [--attach=<path> ...]',
+  '  reply <uid> --body= [--attach=<path> ...] [--mailbox=<path>]',
   '  list-folders [--kind=folder|label|system|all]',
   '  create-folder <name> [--label]',
   '  delete-folder <name> [--label]',
@@ -51,6 +51,12 @@ function requireUid(args, command) {
     process.exit(1);
   }
   return uid;
+}
+
+// Which mailbox a command acts on. A bare name is resolved against the
+// mailboxes that exist, so --mailbox=Receipts finds Folders/Receipts.
+function mailboxArg(args) {
+  return getArg(args, 'mailbox') || 'INBOX';
 }
 
 // Proton keeps folders and labels in separate trees and they behave
@@ -87,7 +93,7 @@ async function main() {
       case 'list-inbox': {
         const limit = parseInt(getArg(args, 'limit') || '10');
         const unreadOnly = args.includes('--unread');
-        const emails = await skill.listInbox(limit, unreadOnly);
+        const emails = await skill.listInbox(limit, unreadOnly, mailboxArg(args));
         console.log(JSON.stringify(emails, null, 2));
         break;
       }
@@ -99,7 +105,7 @@ async function main() {
           process.exit(1);
         }
         const limit = parseInt(getArg(args, 'limit') || '10');
-        const results = await skill.searchEmails(query, limit);
+        const results = await skill.searchEmails(query, limit, mailboxArg(args));
         console.log(JSON.stringify(results, null, 2));
         break;
       }
@@ -110,7 +116,7 @@ async function main() {
           console.error('Error: read requires a message ID');
           process.exit(1);
         }
-        const email = await skill.readEmail(messageId);
+        const email = await skill.readEmail(messageId, mailboxArg(args));
 
         const wanted = getArg(args, 'attachment');
         if (wanted) {
@@ -162,7 +168,7 @@ async function main() {
           process.exit(1);
         }
 
-        const result = await skill.replyToEmail(messageId, body, { attachments });
+        const result = await skill.replyToEmail(messageId, body, { attachments }, mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -219,7 +225,7 @@ async function main() {
           cc: getArg(args, 'cc') || undefined,
           bcc: getArg(args, 'bcc') || undefined,
           attachments,
-        });
+        }, mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -227,21 +233,21 @@ async function main() {
       case 'mark-read':
       case 'mark-unread': {
         const uid = requireUid(args, command);
-        const result = await skill.markRead(uid, command === 'mark-read', getArg(args, 'mailbox') || 'INBOX');
+        const result = await skill.markRead(uid, command === 'mark-read', mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }
 
       case 'star': {
         const uid = requireUid(args, command);
-        const result = await skill.starEmail(uid, getArg(args, 'mailbox') || 'INBOX');
+        const result = await skill.starEmail(uid, mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }
 
       case 'unstar': {
         const uid = requireUid(args, command);
-        const result = await skill.unstarEmail(uid, getArg(args, 'mailbox') || 'INBOX');
+        const result = await skill.unstarEmail(uid, mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -254,7 +260,7 @@ async function main() {
           process.exit(1);
         }
 
-        const result = await skill.moveEmail(uid, target, getArg(args, 'mailbox') || 'INBOX');
+        const result = await skill.moveEmail(uid, target, mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }
@@ -263,7 +269,7 @@ async function main() {
         const uid = requireUid(args, command);
         // Trash is recoverable; expunging is not, so it is opt-in.
         const permanent = args.includes('--permanent');
-        const result = await skill.deleteEmail(uid, permanent, getArg(args, 'mailbox') || 'INBOX');
+        const result = await skill.deleteEmail(uid, permanent, mailboxArg(args));
         console.log(JSON.stringify(result, null, 2));
         break;
       }

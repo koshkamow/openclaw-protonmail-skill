@@ -78,6 +78,25 @@ fails on its own message rather than producing a half-formed email.
 `--attachment` matches the filename exactly first, then case-insensitively,
 and lists what the message does carry when nothing matches.
 
+### Working outside INBOX
+
+`list-inbox`, `search`, `read`, `reply` and `thread` all take `--mailbox`, as
+do the message-state commands. Without it they act on INBOX.
+
+```bash
+protonmail search "from:alice@example.com" --mailbox=Archive
+protonmail list-inbox --limit=5 --mailbox=Sent
+protonmail read <uid> --mailbox=Sent
+protonmail search "invoice" --mailbox=Receipts     # a bare folder name works
+protonmail search "urgent" --mailbox=Labels/Urgent # so does a full path
+```
+
+The name is resolved against the mailboxes that exist, so a bare `Receipts`
+finds `Folders/Receipts`, an unknown name lists what is available, and a name
+that is both a folder and a label asks for the full path rather than picking
+one. **UIDs are per-mailbox**: uid 77 in `Sent` is a different message from
+uid 77 in `INBOX`.
+
 ### Folders and labels
 
 Proton keeps **folders and labels in separate trees**, under `\Noselect`

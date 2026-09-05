@@ -336,6 +336,7 @@ export class IMAPClient {
    *
    * @param limit - Maximum emails to return
    * @param unreadOnly - Filter to unread messages only
+   * @param mailbox - Mailbox to list (default: INBOX)
    * @returns Array of email metadata, newest first
    *
    * @example
@@ -344,8 +345,8 @@ export class IMAPClient {
    * console.log(emails.map(e => `${e.from}: ${e.subject}`));
    * ```
    */
-  async listInbox(limit = 10, unreadOnly = false): Promise<EmailMetadata[]> {
-    return this.withMailbox('INBOX', true, async (client) => {
+  async listInbox(limit = 10, unreadOnly = false, mailbox = 'INBOX'): Promise<EmailMetadata[]> {
+    return this.withMailbox(mailbox, true, async (client) => {
       const criteria: SearchObject = unreadOnly ? { seen: false } : { all: true };
       const uids = await client.search(criteria, { uid: true });
 
@@ -360,6 +361,7 @@ export class IMAPClient {
    *
    * @param query - Search query (supports IMAP search syntax)
    * @param limit - Maximum results
+   * @param mailbox - Mailbox to search (default: INBOX)
    * @returns Matching emails, newest first
    *
    * @example
@@ -369,10 +371,10 @@ export class IMAPClient {
    * - `body:invoice` - Body contains keyword
    * - `newer_than:7d` - Last 7 days
    */
-  async search(query: string, limit = 10): Promise<EmailMetadata[]> {
+  async search(query: string, limit = 10, mailbox = 'INBOX'): Promise<EmailMetadata[]> {
     const criteria = parseSearchQuery(query);
 
-    return this.withMailbox('INBOX', true, async (client) => {
+    return this.withMailbox(mailbox, true, async (client) => {
       const uids = await client.search(criteria, { uid: true });
 
       if (!uids || uids.length === 0) return [];
@@ -660,6 +662,7 @@ export class IMAPClient {
    * Read full email content by UID
    *
    * @param messageId - Message UID
+   * @param mailbox - Mailbox the message lives in (default: INBOX)
    * @returns Parsed email with headers, body, and attachments
    *
    * @throws {Error} If message UID is invalid
@@ -672,12 +675,12 @@ export class IMAPClient {
    * console.log(email.attachments); // File attachments
    * ```
    */
-  async readMessage(messageId: string): Promise<ParsedMail> {
-    return this.withMailbox('INBOX', true, async (client) => {
+  async readMessage(messageId: string, mailbox = 'INBOX'): Promise<ParsedMail> {
+    return this.withMailbox(mailbox, true, async (client) => {
       const msg = await client.fetchOne(messageId, { source: true }, { uid: true });
 
       if (!msg || !msg.source) {
-        throw new Error(`Message UID ${messageId} not found in INBOX`);
+        throw new Error(`Message UID ${messageId} not found in ${mailbox}`);
       }
 
       return simpleParser(msg.source);

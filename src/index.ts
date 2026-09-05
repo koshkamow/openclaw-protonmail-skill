@@ -208,8 +208,8 @@ export class ProtonMailSkill {
    * const recent = await skill.listInbox(5, true); // 5 unread emails
    * ```
    */
-  async listInbox(limit = 10, unreadOnly = false): Promise<any[]> {
-    return this.imap.listInbox(limit, unreadOnly);
+  async listInbox(limit = 10, unreadOnly = false, mailbox = 'INBOX'): Promise<any[]> {
+    return this.imap.listInbox(limit, unreadOnly, await this.resolveMailbox(mailbox));
   }
 
   /**
@@ -224,8 +224,8 @@ export class ProtonMailSkill {
    * const results = await skill.searchEmails('from:alice@example.com', 20);
    * ```
    */
-  async searchEmails(query: string, limit = 10): Promise<any[]> {
-    return this.imap.search(query, limit);
+  async searchEmails(query: string, limit = 10, mailbox = 'INBOX'): Promise<any[]> {
+    return this.imap.search(query, limit, await this.resolveMailbox(mailbox));
   }
 
   /**
@@ -236,8 +236,8 @@ export class ProtonMailSkill {
    * 
    * @throws {Error} If message ID is invalid or email doesn't exist
    */
-  async readEmail(messageId: string): Promise<any> {
-    return this.imap.readMessage(messageId);
+  async readEmail(messageId: string, mailbox = 'INBOX'): Promise<any> {
+    return this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
   }
 
   /**
@@ -275,8 +275,13 @@ export class ProtonMailSkill {
    * Automatically sets Reply-To, In-Reply-To, and References headers
    * to maintain threading.
    */
-  async replyToEmail(messageId: string, body: string, options?: ReplyOptions): Promise<any> {
-    const original = await this.imap.readMessage(messageId);
+  async replyToEmail(
+    messageId: string,
+    body: string,
+    options?: ReplyOptions,
+    mailbox = 'INBOX'
+  ): Promise<any> {
+    const original = await this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
     return this.smtp.reply(original, body, options);
   }
 
@@ -294,9 +299,30 @@ export class ProtonMailSkill {
    * conversation by subject plus participants, so an unchanged subject is what
    * keeps the message in the thread in its UI.
    */
-  async continueThread(messageId: string, body: string, options?: ThreadOptions): Promise<any> {
-    const original = await this.imap.readMessage(messageId);
+  async continueThread(
+    messageId: string,
+    body: string,
+    options?: ThreadOptions,
+    mailbox = 'INBOX'
+  ): Promise<any> {
+    const original = await this.imap.readMessage(messageId, await this.resolveMailbox(mailbox));
     return this.smtp.continueThread(original, body, options);
+  }
+
+  /**
+   * Turn a mailbox name from a caller into a full IMAP path.
+   *
+   * @remarks
+   * INBOX short-circuits, so the common case costs no extra round trip. Any
+   * other name is resolved against the mailboxes that exist, which is what
+   * lets `--mailbox=Receipts` mean `Folders/Receipts` and reports an unknown
+   * or ambiguous name instead of selecting nothing.
+   *
+   * @private
+   */
+  private async resolveMailbox(mailbox: string): Promise<string> {
+    if (!mailbox || mailbox === 'INBOX') return 'INBOX';
+    return resolveTargetMailbox(mailbox, await this.imap.listMailboxes());
   }
 
   // ========================================
@@ -360,7 +386,7 @@ export class ProtonMailSkill {
    * @param mailbox - Mailbox the message lives in (default: INBOX)
    */
   async markRead(uid: string, read: boolean, mailbox = 'INBOX'): Promise<{ uid: string; read: boolean }> {
-    return this.imap.markRead(uid, read, mailbox);
+    return this.imap.markRead(uid, read, await this.resolveMailbox(mailbox));
   }
 
   /**
@@ -374,7 +400,7 @@ export class ProtonMailSkill {
    * directly does not star anything; Bridge reverts it.
    */
   async starEmail(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; alreadyStarred: boolean }> {
-    return this.imap.star(uid, mailbox);
+    return this.imap.star(uid, await this.resolveMailbox(mailbox));
   }
 
   /**
@@ -384,7 +410,7 @@ export class ProtonMailSkill {
    * @param mailbox - Mailbox the message lives in (default: INBOX)
    */
   async unstarEmail(uid: string, mailbox = 'INBOX'): Promise<{ uid: string; starred: boolean; wasStarred: boolean }> {
-    return this.imap.unstar(uid, mailbox);
+    return this.imap.unstar(uid, await this.resolveMailbox(mailbox));
   }
 
   /**
@@ -405,8 +431,12 @@ export class ProtonMailSkill {
     target: string,
     mailbox = 'INBOX'
   ): Promise<{ uid: string; from: string; to: string; newUid: string | null }> {
-    const resolved = resolveTargetMailbox(target, await this.imap.listMailboxes());
-    return this.imap.moveMessage(uid, resolved, mailbox);
+    const boxes = await this.imap.listMailboxes();
+    return this.imap.moveMessage(
+      uid,
+      resolveTargetMailbox(target, boxes),
+      mailbox === 'INBOX' ? 'INBOX' : resolveTargetMailbox(mailbox, boxes)
+    );
   }
 
   /**
@@ -421,7 +451,7 @@ export class ProtonMailSkill {
     permanent = false,
     mailbox = 'INBOX'
   ): Promise<{ uid: string; deleted: 'trashed' | 'expunged'; to: string | null }> {
-    return this.imap.deleteMessage(uid, permanent, mailbox);
+    return this.imap.deleteMessage(uid, permanent, await this.resolveMailbox(mailbox));
   }
 }
 
