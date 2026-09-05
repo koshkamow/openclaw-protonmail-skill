@@ -1,6 +1,6 @@
 ---
 name: protonmail
-description: ProtonMail integration via Proton Mail Bridge for reading and sending encrypted emails.
+description: ProtonMail via Proton Mail Bridge — read, search, send, reply, continue a thread, manage folders and labels, and mark, star, move or delete messages.
 homepage: https://github.com/rvacyber/openclaw-protonmail-skill
 metadata: {"openclaw":{"emoji":"🔐","requires":{"env":["PROTONMAIL_ACCOUNT","PROTONMAIL_BRIDGE_PASSWORD"]},"install":[{"id":"brew-bridge","kind":"brew","formula":"proton-mail-bridge","bins":[],"label":"Install Proton Mail Bridge (macOS)","cask":true}]}}
 ---
@@ -9,7 +9,7 @@ metadata: {"openclaw":{"emoji":"🔐","requires":{"env":["PROTONMAIL_ACCOUNT","P
 
 # ProtonMail Skill (v1.0.1)
 
-Use ProtonMail for secure email via Proton Mail Bridge. Stable release — CLI tested against live Proton Mail Bridge.
+Use ProtonMail for secure email via Proton Mail Bridge. Runs on Bun. CLI tested against live Proton Mail Bridge.
 
 ## Setup (once)
 
@@ -48,24 +48,51 @@ Use ProtonMail for secure email via Proton Mail Bridge. Stable release — CLI t
 
 ## CLI Usage
 
-The skill provides a `protonmail` CLI tool:
+The skill provides a `protonmail` CLI tool. Every message command takes
+`--mailbox=<path>` and acts on INBOX without it.
 
 ```bash
-# List inbox (most recent 10 emails)
-protonmail list-inbox --limit=10 [--unread]
+# Reading
+protonmail list-inbox [--limit=10] [--unread] [--mailbox=<path>]
+protonmail search <query> [--limit=10] [--mailbox=<path>]
+protonmail read <uid> [--mailbox=<path>]
 
-# Search emails
-protonmail search "from:alice@example.com" --limit=20
+# Write one attachment's bytes to stdout — redirect them to a file
+protonmail read <uid> --attachment=report.pdf > report.pdf
 
-# Read specific email
-protonmail read <uid>
+# Sending — repeat --attach for multiple files
+protonmail send --to=bob@example.com --subject="Meeting" --body="See you at 3pm" \
+  [--cc=] [--bcc=] [--attach=/path/report.pdf ...]
+protonmail reply <uid> --body="Sounds good!" [--attach=] [--mailbox=<path>]
+protonmail thread <uid> --body="One more thing." [--to=] [--cc=] [--bcc=] [--attach=]
 
-# Send email
-protonmail send --to=bob@example.com --subject="Meeting" --body="See you at 3pm"
+# Folders and labels — a folder by default, --label selects the other tree
+protonmail list-folders [--kind=folder|label|system|container|all]
+protonmail create-folder <name> [--label]
+protonmail delete-folder <name> [--label]
 
-# Reply to email
-protonmail reply <uid> --body="Sounds good!"
+# Message state
+protonmail mark-read <uid>
+protonmail mark-unread <uid>
+protonmail star <uid>
+protonmail unstar <uid>
+protonmail move <uid> <mailbox>
+protonmail delete <uid> [--permanent]   # without --permanent, moves to Trash
 ```
+
+`search` takes `from:`, `subject:`, `body:` and `newer_than:7d` filters, which
+AND together; anything else is treated as a subject keyword.
+
+```bash
+protonmail search "from:alice@example.com newer_than:7d" --limit=20
+protonmail search "invoice" --mailbox=Receipts     # a bare folder name works
+protonmail search "urgent" --mailbox=Labels/Urgent # so does a full path
+```
+
+Proton keeps folders and labels in separate trees, UIDs are per-mailbox, and a
+star is mailbox membership rather than a flag — see
+[docs/mailboxes-threading-and-state.md](docs/mailboxes-threading-and-state.md)
+for the behaviour behind those commands.
 
 ## Common Requests
 
@@ -74,6 +101,8 @@ protonmail reply <uid> --body="Sounds good!"
 - **Read email:** "Read ProtonMail email UID 31"
 - **Send email:** "Send an email via ProtonMail to bob@example.com about the project"
 - **Reply:** "Reply to ProtonMail email UID 31"
+- **List folders:** "What folders and labels do I have in ProtonMail?"
+- **Make a folder:** "Create a ProtonMail folder called Receipts"
 
 ## How It Works
 
@@ -102,7 +131,7 @@ protonmail reply <uid> --body="Sounds good!"
 - **Check account email:** Must match exactly (e.g., `user@pm.me` or `user@protonmail.com`)
 
 ### "Skill not found"
-- **Reinstall skill:** Run `npm run install-skill` in the skill directory
+- **Reinstall skill:** Run `bun run install-skill` in the skill directory
 - **Check OpenClaw config:** Ensure `skills.protonmail.enabled: true`
 
 ## Development

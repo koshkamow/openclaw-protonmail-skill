@@ -1,8 +1,8 @@
 # ProtonMail Skill for OpenClaw
 
-[![CI](https://github.com/rvacyber/openclaw-protonmail-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/rvacyber/openclaw-protonmail-skill/actions/workflows/ci.yml)
+[![CI](https://github.com/koshkamow/openclaw-protonmail-skill/actions/workflows/ci.yml/badge.svg)](https://github.com/koshkamow/openclaw-protonmail-skill/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)](https://nodejs.org)
+[![Bun Version](https://img.shields.io/badge/bun-%3E%3D1.3.0-black)](https://bun.sh)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.0+-blue)](https://www.typescriptlang.org/)
 
 Connect your OpenClaw agent to ProtonMail via Proton Mail Bridge for secure email management.
@@ -54,7 +54,7 @@ This skill enables OpenClaw to read, send, and manage emails through your Proton
 - **Proton Mail Bridge** — [Download from Proton](https://proton.me/mail/bridge)
 - **ProtonMail account** (Free or paid)
 - **OpenClaw** v2024.1.0+
-- **Node.js** 18+ (for development)
+- **Bun** 1.3+ — the runtime this skill builds, tests and runs on
 
 ## Installation
 
@@ -101,14 +101,14 @@ Download from https://proton.me/mail/bridge
 
 ```bash
 # Clone the repo
-git clone https://github.com/rvacyber/openclaw-protonmail-skill.git
+git clone https://github.com/koshkamow/openclaw-protonmail-skill.git
 cd openclaw-protonmail-skill
 
 # Install dependencies
-npm install
+bun install
 
-# Link to OpenClaw skills directory
-npm run install-skill
+# Link to OpenClaw skills directory (runs typecheck, lint and tests first)
+bun run install-skill
 ```
 
 ### 4. Configure OpenClaw
@@ -173,17 +173,41 @@ If you installed version `0.1.0`, upgrade to `0.1.1` when released.
 ### Setup
 
 ```bash
-git clone https://github.com/rvacyber/openclaw-protonmail-skill.git
+git clone https://github.com/koshkamow/openclaw-protonmail-skill.git
 cd openclaw-protonmail-skill
-npm install
-npm run dev
+bun install
 ```
+
+There is no build step. Bun runs the TypeScript sources directly, so `bin/protonmail`
+executes `src/` as it stands and there is no compiled copy to fall out of date.
+
+The command itself is `src/cli.ts`; `bin/protonmail` imports it and turns its exit
+code into the process's own. The split is what puts the CLI under `tsc` and Biome,
+both of which decide what to parse from a file's extension — and `bin/protonmail`
+has none. Running it needs a TypeScript-capable runtime: Bun, as the shebang and
+the `engines` field both say.
 
 ### Testing
 
 ```bash
-npm test
+bun test          # unit tests
+bun run typecheck # tsc --noEmit — Bun strips types, it does not check them
+bun run lint
+bun run check     # all three
 ```
+
+### Talking to Bridge over TLS
+
+Bridge presents a self-signed certificate whose only subjectAltName is the IP
+`127.0.0.1`. Point `NODE_EXTRA_CA_CERTS` at Bridge's exported CA so the chain
+verifies; Bun honours that variable.
+
+Bun additionally ignores the `host` option when checking that a certificate
+belongs to the machine reached over an upgraded socket — the STARTTLS path —
+and checks against a default of `localhost` instead, which the certificate does
+not name. `src/bridge-tls.ts` supplies a `checkServerIdentity` bound to the
+configured host, which is Node's own check with the right argument. Certificate
+verification stays fully on; nothing sets `rejectUnauthorized: false`.
 
 ### Project Structure
 
@@ -191,11 +215,15 @@ npm test
 openclaw-protonmail-skill/
 ├── SKILL.md          # OpenClaw skill manifest
 ├── README.md         # This file
-├── package.json      # Node.js dependencies
+├── package.json      # dependencies and scripts
 ├── src/
 │   ├── index.ts      # Main skill entry point
 │   ├── imap.ts       # IMAP client for reading emails
 │   ├── smtp.ts       # SMTP client for sending emails
+│   ├── attachments.ts # --attach / --attachment helpers
+│   ├── mailboxes.ts  # Folders/Labels tree rules and guards
+│   ├── threading.ts  # In-Reply-To / References and subject rules
+│   ├── bridge-tls.ts # TLS options for Bridge's self-signed cert
 │   └── tools.ts      # Tool definitions for OpenClaw
 ├── test/
 │   └── integration.test.ts

@@ -10,23 +10,33 @@
  * not as EmailAddress[]. The correct path is `from?.value?.[0]?.address`.
  */
 
-import { SMTPClient } from '../src/smtp';
+import { beforeEach, describe, expect, it, mock } from 'bun:test';
+import type { AddressObject, EmailAddress, ParsedMail } from 'mailparser';
+import type { SendMailOptions } from 'nodemailer';
 
 // ---------------------------------------------------------------------------
-// Minimal nodemailer transporter mock — captures sendMail calls
+// Minimal nodemailer transporter mock — captures sendMail calls.
+//
+// mock.module() must run before the module under test is loaded, and static
+// imports are hoisted above it — hence the dynamic import below.
 // ---------------------------------------------------------------------------
-const mockSendMail = jest.fn().mockResolvedValue({ messageId: '<sent@test>' });
-
-jest.mock('nodemailer', () => ({
-  createTransport: jest.fn(() => ({
-    sendMail: mockSendMail,
-  })),
+// The parameter is declared so the recorded calls are typed: without it the
+// mock's call tuple is empty and mock.calls[0][0] does not typecheck.
+const mockSendMail = mock(async (_options: SendMailOptions) => ({
+  messageId: '<sent@test>',
 }));
+
+const transport = { createTransport: mock(() => ({ sendMail: mockSendMail })) };
+mock.module('nodemailer', () => ({ default: transport, ...transport }));
+
+const { SMTPClient } = await import('../src/smtp');
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-function makeSmtp() {
+// SMTPClient arrives through a dynamic import, so the binding is a value and
+// the instance type is reached through it rather than by name.
+function makeSmtp(): InstanceType<typeof SMTPClient> {
   return new SMTPClient({
     host: '127.0.0.1',
     port: 1025,
@@ -35,10 +45,28 @@ function makeSmtp() {
   });
 }
 
-/** Build a minimal mailparser-shaped ParsedMail object */
-function parsedMail(overrides: Record<string, any> = {}) {
+/** An address header in mailparser's shape: the list, plus its two renderings */
+function addresses(...value: EmailAddress[]): AddressObject {
+  const text = value.map((a) => (a.name ? `${a.name} <${a.address}>` : `${a.address}`)).join(', ');
+  return { value, text, html: text };
+}
+
+/**
+ * Build a ParsedMail, overriding whichever fields a test cares about.
+ *
+ * @remarks
+ * Typed as the real ParsedMail rather than a loose object, so the four fields
+ * mailparser always sets — attachments, headers, headerLines, html — are here
+ * whether or not a test reads them, and an override that does not fit the
+ * library's shape fails to compile instead of at the assertion.
+ */
+function parsedMail(overrides: Partial<ParsedMail> = {}): ParsedMail {
   return {
-    from: { value: [{ address: 'alice@example.com', name: 'Alice' }], text: 'Alice <alice@example.com>' },
+    attachments: [],
+    headers: new Map(),
+    headerLines: [],
+    html: false,
+    from: addresses({ address: 'alice@example.com', name: 'Alice' }),
     replyTo: undefined,
     subject: 'Original subject',
     messageId: '<original-msg-id@example.com>',
@@ -53,6 +81,7 @@ function parsedMail(overrides: Record<string, any> = {}) {
 describe('SMTPClient.reply()', () => {
   beforeEach(() => {
     mockSendMail.mockClear();
+    transport.createTransport.mockClear();
   });
 
   it('extracts recipient from from.value[0].address (mailparser shape)', async () => {
@@ -68,7 +97,7 @@ describe('SMTPClient.reply()', () => {
   it('prefers replyTo.value[0].address over from when present', async () => {
     const smtp = makeSmtp();
     const original = parsedMail({
-      replyTo: { value: [{ address: 'noreply@lists.example.com', name: '' }] },
+      replyTo: addresses({ address: 'noreply@lists.example.com', name: '' }),
     });
 
     await smtp.reply(original, 'Hello back');
@@ -105,7 +134,7 @@ describe('SMTPClient.reply()', () => {
 
     const sent = mockSendMail.mock.calls[0][0];
     expect(sent.references).toBe(
-      '<first@example.com> <second@example.com> <original-msg-id@example.com>'
+      '<first@example.com> <second@example.com> <original-msg-id@example.com>',
     );
   });
 
@@ -127,13 +156,47 @@ describe('SMTPClient.reply()', () => {
     expect(mockSendMail.mock.calls[0][0].references).toBe('<original-msg-id@example.com>');
   });
 
+  it('passes attachments through to nodemailer', async () => {
+    const smtp = makeSmtp();
+    const attachments = [{ filename: 'report.pdf', path: '/tmp/report.pdf' }];
+
+    await smtp.reply(parsedMail(), 'Attached.', { attachments });
+
+    expect(mockSendMail.mock.calls[0][0].attachments).toEqual(attachments);
+  });
+
+  it('leaves attachments undefined when no options are given', async () => {
+    const smtp = makeSmtp();
+    await smtp.reply(parsedMail(), 'Hi');
+    expect(mockSendMail.mock.calls[0][0].attachments).toBeUndefined();
+  });
+
+  it('keeps threading headers intact when replying with an attachment', async () => {
+    const smtp = makeSmtp();
+    await smtp.reply(parsedMail(), 'Attached.', {
+      attachments: [{ filename: 'report.pdf', path: '/tmp/report.pdf' }],
+    });
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
+    expect(sent.references).toBe('<original-msg-id@example.com>');
+    expect(sent.subject).toBe('Re: Original subject');
+  });
+
   it('throws when no From or Reply-To address is available', async () => {
     const smtp = makeSmtp();
-    const broken = parsedMail({ from: { value: [] }, replyTo: undefined });
+    const broken = parsedMail({ from: addresses(), replyTo: undefined });
 
-    await expect(smtp.reply(broken, 'Hi')).rejects.toThrow(
-      'could not determine recipient'
-    );
+    await expect(smtp.reply(broken, 'Hi')).rejects.toThrow('could not determine recipient');
+  });
+
+  it('sends no threading headers when the original has no Message-ID', async () => {
+    const smtp = makeSmtp();
+    await smtp.reply(parsedMail({ messageId: undefined }), 'Hi');
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.inReplyTo).toBeUndefined();
+    expect(sent.references).toBeUndefined();
   });
 
   it('does not call sendMail when recipient extraction fails', async () => {
@@ -142,5 +205,87 @@ describe('SMTPClient.reply()', () => {
 
     await expect(smtp.reply(broken, 'Hi')).rejects.toThrow();
     expect(mockSendMail).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// continueThread() — a new message into an existing conversation
+// ---------------------------------------------------------------------------
+describe('SMTPClient.continueThread()', () => {
+  beforeEach(() => {
+    mockSendMail.mockClear();
+    transport.createTransport.mockClear();
+  });
+
+  it('carries the subject byte for byte, with no Re: prefix', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail(), 'Still on this.');
+
+    expect(mockSendMail.mock.calls[0][0].subject).toBe('Original subject');
+  });
+
+  it('leaves an existing Re: subject exactly as it found it', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail({ subject: 'Re: Original subject' }), 'More.');
+
+    expect(mockSendMail.mock.calls[0][0].subject).toBe('Re: Original subject');
+  });
+
+  it('sets the threading headers from the original', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail({ references: ['<first@example.com>'] }), 'More.');
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
+    expect(sent.references).toBe('<first@example.com> <original-msg-id@example.com>');
+  });
+
+  it('defaults the recipient to the original sender', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail(), 'More.');
+
+    expect(mockSendMail.mock.calls[0][0].to).toBe('alice@example.com');
+  });
+
+  it('sends to an explicit recipient instead, without leaving the thread', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail(), 'Adding Bob.', { to: 'bob@example.com' });
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.to).toBe('bob@example.com');
+    expect(sent.subject).toBe('Original subject');
+    expect(sent.inReplyTo).toBe('<original-msg-id@example.com>');
+  });
+
+  it('passes cc, bcc and attachments through', async () => {
+    const smtp = makeSmtp();
+    const attachments = [{ filename: 'report.pdf', path: '/tmp/report.pdf' }];
+
+    await smtp.continueThread(parsedMail(), 'With a file.', {
+      cc: 'carol@example.com',
+      bcc: 'dan@example.com',
+      attachments,
+    });
+
+    const sent = mockSendMail.mock.calls[0][0];
+    expect(sent.cc).toBe('carol@example.com');
+    expect(sent.bcc).toBe('dan@example.com');
+    expect(sent.attachments).toEqual(attachments);
+  });
+
+  it('throws when no recipient can be determined and none was given', async () => {
+    const smtp = makeSmtp();
+    await expect(smtp.continueThread(parsedMail({ from: undefined }), 'Hi')).rejects.toThrow(
+      'thread: could not determine recipient',
+    );
+  });
+
+  it('still sends when the original has no sender but a recipient was given', async () => {
+    const smtp = makeSmtp();
+    await smtp.continueThread(parsedMail({ from: undefined }), 'Hi', {
+      to: 'bob@example.com',
+    });
+
+    expect(mockSendMail.mock.calls[0][0].to).toBe('bob@example.com');
   });
 });
