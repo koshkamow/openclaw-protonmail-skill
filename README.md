@@ -181,6 +181,12 @@ bun install
 There is no build step. Bun runs the TypeScript sources directly, so `bin/protonmail`
 executes `src/` as it stands and there is no compiled copy to fall out of date.
 
+The command itself is `src/cli.ts`; `bin/protonmail` imports it and turns its exit
+code into the process's own. The split is what puts the CLI under `tsc` and Biome,
+both of which decide what to parse from a file's extension — and `bin/protonmail`
+has none. Running it needs a TypeScript-capable runtime: Bun, as the shebang and
+the `engines` field both say.
+
 ### Testing
 
 ```bash
