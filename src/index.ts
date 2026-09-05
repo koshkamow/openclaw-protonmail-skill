@@ -26,9 +26,21 @@ import { IMAPClient } from './imap';
 import { SMTPClient } from './smtp';
 import type { ReplyOptions } from './smtp';
 import { bridgeTlsOptions } from './bridge-tls';
+import { resolveMailboxPath } from './mailboxes';
+import type { MailboxInfo } from './mailboxes';
 import { registerTools } from './tools';
 
 export { bridgeTlsOptions } from './bridge-tls';
+export {
+  resolveMailboxPath,
+  classifyMailbox,
+  assertDeletable,
+  isSystemMailbox,
+  MailboxError,
+  FOLDERS_ROOT,
+  LABELS_ROOT,
+} from './mailboxes';
+export type { MailboxInfo, MailboxKind } from './mailboxes';
 
 export type { ReplyOptions, SendOptions } from './smtp';
 export {
@@ -256,6 +268,55 @@ export class ProtonMailSkill {
   async replyToEmail(messageId: string, body: string, options?: ReplyOptions): Promise<any> {
     const original = await this.imap.readMessage(messageId);
     return this.smtp.reply(original, body, options);
+  }
+
+  // ========================================
+  // Mailboxes
+  // ========================================
+
+  /**
+   * List every mailbox, classified as system, folder, label or container
+   *
+   * @returns Mailboxes in the order the server reports them
+   *
+   * @remarks
+   * Proton keeps folders and labels in separate trees, under `\Noselect`
+   * parents named `Folders` and `Labels`. A message lives in one folder and
+   * can carry many labels.
+   */
+  async listMailboxes(): Promise<MailboxInfo[]> {
+    return this.imap.listMailboxes();
+  }
+
+  /**
+   * Create a folder or a label
+   *
+   * @param name - Bare name (`Receipts`) or full path (`Folders/Receipts`)
+   * @param kind - Which tree to create it in
+   * @returns The path created, and whether it already existed
+   */
+  async createMailbox(
+    name: string,
+    kind: 'folder' | 'label' = 'folder'
+  ): Promise<{ path: string; created: boolean }> {
+    return this.imap.createMailbox(resolveMailboxPath(name, kind));
+  }
+
+  /**
+   * Delete a folder or a label
+   *
+   * @param name - Bare name (`Receipts`) or full path (`Folders/Receipts`)
+   * @param kind - Which tree it lives in
+   * @returns The path deleted
+   *
+   * @throws {MailboxError} If it names a system mailbox, a tree root, or
+   *   a mailbox that does not exist
+   */
+  async deleteMailbox(
+    name: string,
+    kind: 'folder' | 'label' = 'folder'
+  ): Promise<{ path: string }> {
+    return this.imap.deleteMailbox(resolveMailboxPath(name, kind));
   }
 }
 

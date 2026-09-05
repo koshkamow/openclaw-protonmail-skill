@@ -78,6 +78,39 @@ fails on its own message rather than producing a half-formed email.
 `--attachment` matches the filename exactly first, then case-insensitively,
 and lists what the message does carry when nothing matches.
 
+### Folders and labels
+
+Proton keeps **folders and labels in separate trees**, under `\Noselect`
+parents named `Folders` and `Labels`. A message lives in exactly one folder and
+can carry many labels, so every command says which it means: the default is a
+folder, and `--label` selects the other tree.
+
+```bash
+# Every mailbox, classified as system / folder / label / container
+protonmail list-folders
+
+# Just one kind
+protonmail list-folders --kind=folder
+protonmail list-folders --kind=label
+
+# Create — "Receipts" becomes Folders/Receipts, or Labels/Receipts with --label
+protonmail create-folder Receipts
+protonmail create-folder Urgent --label
+
+# Nesting works; intermediate levels are created for you
+protonmail create-folder "2026/Q1"
+
+# Delete
+protonmail delete-folder Receipts
+protonmail delete-folder Urgent --label
+```
+
+A full path from `list-folders` is accepted as given (`Folders/Receipts`), and
+is refused when it names the other tree — `delete-folder Labels/Urgent` is an
+error rather than a silent guess. Proton's own mailboxes (`INBOX`, `Sent`,
+`Drafts`, `Archive`, `Spam`, `Trash`, `All Mail`, `Starred`) and the two tree
+roots cannot be created or deleted.
+
 ## Common Requests
 
 - **List inbox:** "Check my ProtonMail inbox"
@@ -85,6 +118,8 @@ and lists what the message does carry when nothing matches.
 - **Read email:** "Read ProtonMail email UID 31"
 - **Send email:** "Send an email via ProtonMail to bob@example.com about the project"
 - **Reply:** "Reply to ProtonMail email UID 31"
+- **List folders:** "What folders and labels do I have in ProtonMail?"
+- **Make a folder:** "Create a ProtonMail folder called Receipts"
 
 ## How It Works
 

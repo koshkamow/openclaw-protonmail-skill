@@ -11,9 +11,30 @@
  *   protonmail read <message-id> [--attachment=<filename>]
  *   protonmail send --to=<email> --subject=<subject> --body=<body> [--cc=<email>] [--bcc=<email>] [--attach=<path> ...]
  *   protonmail reply <message-id> --body=<body> [--attach=<path> ...]
+ *   protonmail list-folders [--kind=folder|label|system|all]
+ *   protonmail create-folder <name> [--label]
+ *   protonmail delete-folder <name> [--label]
  */
 
 const { ProtonMailSkill, resolveAttachments, pickAttachment } = require('../src/index.ts');
+
+const COMMANDS = [
+  'Commands:',
+  '  list-inbox [--limit=N] [--unread]',
+  '  search <query> [--limit=N]',
+  '  read <uid> [--attachment=<filename>]',
+  '  send --to= --subject= --body= [--cc=] [--bcc=] [--attach=<path> ...]',
+  '  reply <uid> --body= [--attach=<path> ...]',
+  '  list-folders [--kind=folder|label|system|all]',
+  '  create-folder <name> [--label]',
+  '  delete-folder <name> [--label]',
+].join('\n');
+
+// Proton keeps folders and labels in separate trees and they behave
+// differently, so the command says which it means rather than guessing.
+function mailboxKind(args) {
+  return args.includes('--label') ? 'label' : 'folder';
+}
 
 async function main() {
   const args = process.argv.slice(2);
@@ -21,7 +42,7 @@ async function main() {
 
   if (!command) {
     console.error('Usage: protonmail <command> [options]');
-    console.error('Commands: list-inbox, search, read, send, reply');
+    console.error(COMMANDS);
     process.exit(1);
   }
 
@@ -123,9 +144,48 @@ async function main() {
         break;
       }
 
+      case 'list-folders': {
+        const kind = getArg(args, 'kind') || 'all';
+        if (!['all', 'folder', 'label', 'system', 'container'].includes(kind)) {
+          console.error(`Error: --kind must be one of all, folder, label, system, container`);
+          process.exit(1);
+        }
+
+        const boxes = await skill.listMailboxes();
+        const shown = kind === 'all' ? boxes : boxes.filter(b => b.kind === kind);
+        console.log(JSON.stringify(shown, null, 2));
+        break;
+      }
+
+      case 'create-folder': {
+        const name = args[1];
+        if (!name) {
+          console.error('Error: create-folder requires a name');
+          console.error('Creates a folder; pass --label to create a label instead.');
+          process.exit(1);
+        }
+
+        const result = await skill.createMailbox(name, mailboxKind(args));
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
+      case 'delete-folder': {
+        const name = args[1];
+        if (!name) {
+          console.error('Error: delete-folder requires a name');
+          console.error('Deletes a folder; pass --label to delete a label instead.');
+          process.exit(1);
+        }
+
+        const result = await skill.deleteMailbox(name, mailboxKind(args));
+        console.log(JSON.stringify(result, null, 2));
+        break;
+      }
+
       default:
         console.error(`Unknown command: ${command}`);
-        console.error('Commands: list-inbox, search, read, send, reply');
+        console.error(COMMANDS);
         process.exit(1);
     }
 

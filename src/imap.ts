@@ -12,6 +12,8 @@ import type { MailboxLockObject, SearchObject } from 'imapflow';
 import { simpleParser, ParsedMail } from 'mailparser';
 
 import { bridgeTlsOptions } from './bridge-tls';
+import { assertDeletable, classifyMailbox, MailboxError } from './mailboxes';
+import type { MailboxInfo } from './mailboxes';
 
 /**
  * IMAP connection configuration
@@ -370,6 +372,74 @@ export class IMAPClient {
 
       return this.fetchMetadata(client, uids.slice(-limit));
     });
+  }
+
+  /**
+   * List every mailbox, classified by which tree it belongs to
+   *
+   * @returns Mailboxes in the order the server reports them
+   *
+   * @example
+   * ```typescript
+   * const boxes = await imap.listMailboxes();
+   * boxes.filter(b => b.kind === 'folder'); // user folders only
+   * ```
+   */
+  async listMailboxes(): Promise<MailboxInfo[]> {
+    const client = this.requireClient();
+
+    return (await client.list()).map((box) => ({
+      path: box.path,
+      name: box.name,
+      kind: classifyMailbox(box.path, [...(box.flags ?? [])]),
+      specialUse: box.specialUse ?? null,
+      selectable: !(box.flags ?? new Set<string>()).has('\\Noselect'),
+    }));
+  }
+
+  /**
+   * Create a mailbox
+   *
+   * @param path - Full IMAP path, e.g. `Folders/Receipts`
+   * @returns The path created, and whether it already existed
+   *
+   * @remarks
+   * Intermediate levels are created by the server, so `Folders/a/b` works
+   * without creating `Folders/a` first.
+   */
+  async createMailbox(path: string): Promise<{ path: string; created: boolean }> {
+    const client = this.requireClient();
+    const result = await client.mailboxCreate(path);
+
+    return { path: result.path, created: result.created };
+  }
+
+  /**
+   * Delete a mailbox
+   *
+   * @param path - Full IMAP path
+   * @returns The path deleted
+   *
+   * @throws {MailboxError} If the path names a system mailbox or a tree root,
+   *   or if the mailbox does not exist
+   *
+   * @remarks
+   * Existence is checked first so a typo reports the name rather than a raw
+   * server error, and the guard against system mailboxes runs before anything
+   * is sent.
+   */
+  async deleteMailbox(path: string): Promise<{ path: string }> {
+    assertDeletable(path);
+
+    const client = this.requireClient();
+
+    const existing = (await client.list()).find((box) => box.path === path);
+    if (!existing) {
+      throw new MailboxError(`mailbox not found: ${path}`);
+    }
+
+    await client.mailboxDelete(path);
+    return { path };
   }
 
   /**
