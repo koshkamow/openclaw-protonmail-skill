@@ -118,13 +118,14 @@ export class ProtonMailSkill {
       throw new Error('Unsafe Bridge host configuration. IMAP/SMTP hosts must be localhost (127.0.0.1, localhost, or ::1).');
     }
 
+    // secure: false means "connect in the clear, then STARTTLS" — the same
+    // shape as the SMTP config below, and how Bridge's IMAP port works.
     const imapConfig = {
       user: fullConfig.account,
       password: fullConfig.bridgePassword,
       host: fullConfig.imapHost,
       port: fullConfig.imapPort,
-      tls: false,
-      autotls: 'never'
+      secure: false
     };
 
     // secure: false plus requireTLS means "connect in the clear, then insist on

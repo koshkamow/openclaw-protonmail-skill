@@ -31,14 +31,37 @@
  * `rejectUnauthorized: false`.
  */
 
+import net from 'net';
 import tls from 'tls';
 import type { PeerCertificate } from 'tls';
+
+/**
+ * TLS options for a Bridge connection.
+ */
+export interface BridgeTlsOptions {
+  /** Runs Node's identity check against the host actually dialled */
+  checkServerIdentity: (servername: string, cert: PeerCertificate) => Error | undefined;
+
+  /**
+   * SNI server name. Present only for an IP host, where it is the empty
+   * string — SNI must not carry an IP literal (RFC 6066), and Bun rejects the
+   * `false` that ImapFlow otherwise supplies.
+   */
+  servername?: string;
+}
 
 /**
  * TLS options that verify Bridge's certificate correctly on both runtimes.
  *
  * @param host - The host the connection was opened to, e.g. `127.0.0.1`
  * @returns Options to merge into a `tls.connect` / nodemailer / ImapFlow config
+ *
+ * @remarks
+ * For an IP host this also pins `servername` to the empty string. ImapFlow
+ * sets `servername: false` when the host is an IP literal, which Node accepts
+ * and Bun rejects outright with `servername argument must be an string`.
+ * ImapFlow merges its `tls` option over its own defaults, so naming it here is
+ * what overrides it. An empty SNI is correct for an IP endpoint either way.
  *
  * @example
  * ```typescript
@@ -51,13 +74,17 @@ import type { PeerCertificate } from 'tls';
  * });
  * ```
  */
-export function bridgeTlsOptions(host: string): {
-  checkServerIdentity: (servername: string, cert: PeerCertificate) => Error | undefined;
-} {
-  return {
+export function bridgeTlsOptions(host: string): BridgeTlsOptions {
+  const options: BridgeTlsOptions = {
     // `servername` is ignored on purpose: it is the value Bun gets wrong.
     // `host` is what we dialled, and what the certificate must name.
     checkServerIdentity: (_servername: string, cert: PeerCertificate) =>
       tls.checkServerIdentity(host, cert),
   };
+
+  if (net.isIP(host)) {
+    options.servername = '';
+  }
+
+  return options;
 }
