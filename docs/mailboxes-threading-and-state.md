@@ -37,6 +37,10 @@ error rather than a silent guess.
 Proton's own mailboxes (`INBOX`, `Sent`, `Drafts`, `Archive`, `Spam`, `Trash`,
 `All Mail`, `Starred`) and the two tree roots cannot be created or deleted.
 
+**Nesting works, and intermediate levels are created for you** — the server
+makes them. `create-folder "2026/Q1"` gives `Folders/2026/Q1` without
+`Folders/2026` having to exist first.
+
 **UIDs are per-mailbox.** UID 77 in `Sent` is a different message from UID 77
 in `INBOX`, and a message that moves gets a new UID at its destination —
 `move` reports it as `newUid`.
