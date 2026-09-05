@@ -106,11 +106,15 @@ export function getArgs(args: string[], name: string): string[] {
  * @returns The value, or undefined when the flag is missing **or blank**
  *
  * @remarks
- * `--to=` with nothing after it means the flag was not really given, and the
- * commands that read these flags document a fallback for an absent one —
- * `thread` sends to the original sender. Forwarding `''` instead would skip
- * that fallback and fail at nodemailer, so an empty value is treated as
- * absence here rather than at each call site.
+ * A flag with nothing after it — `--to=`, `--cc=` — means it was not really
+ * given, and that is decided here rather than at each call site.
+ *
+ * It matters most to `thread`, whose `--to` documents a fallback to the
+ * original sender: forwarding `''` skips the fallback and fails at
+ * nodemailer. For `send`'s `--cc` and `--bcc` it is invisible either way,
+ * since nodemailer sets those headers only for a truthy value. One rule for
+ * both is the point — the commands should not disagree about what an empty
+ * flag means.
  */
 export function optionalArg(args: string[], name: string): string | undefined {
   return getArg(args, name) || undefined;
